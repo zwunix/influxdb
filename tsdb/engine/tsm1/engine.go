@@ -953,7 +953,9 @@ func (e *Engine) createVarRefIterator(opt influxql.IteratorOptions, aggregate bo
 			// Calculate tag sets and apply SLIMIT/SOFFSET.
 			tagSets = influxql.LimitTagSets(tagSets, opt.SLimit, opt.SOffset)
 
+			fmt.Println("show tag sets")
 			for _, t := range tagSets {
+				fmt.Println(t)
 				inputs, err := e.createTagSetIterators(ref, mm, t, opt)
 				if err != nil {
 					return err
