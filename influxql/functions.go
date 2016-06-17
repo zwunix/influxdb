@@ -102,7 +102,9 @@ func (r *FloatDerivativeReducer) Emit() []FloatPoint {
 		// difference of each value by the elapsed time normalized to the interval.
 		diff := r.curr.Value - r.prev.Value
 		elapsed := r.curr.Time - r.prev.Time
-		if !r.ascending {
+		if elapsed == 0 {
+			return nil
+		} else if !r.ascending {
 			elapsed = -elapsed
 		}
 		value := diff / (float64(elapsed) / float64(r.interval.Duration))
@@ -149,7 +151,9 @@ func (r *IntegerDerivativeReducer) Emit() []FloatPoint {
 		// difference of each value by the elapsed time normalized to the interval.
 		diff := float64(r.curr.Value - r.prev.Value)
 		elapsed := r.curr.Time - r.prev.Time
-		if !r.ascending {
+		if elapsed == 0 {
+			return nil
+		} else if !r.ascending {
 			elapsed = -elapsed
 		}
 		value := diff / (float64(elapsed) / float64(r.interval.Duration))

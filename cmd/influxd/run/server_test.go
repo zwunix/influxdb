@@ -1560,6 +1560,87 @@ cpu value=20 1278010024000000000
 	}
 }
 
+// Ensure the server can handle simple derivative queries with duplicate times.
+func TestServer_Query_SelectRawDerivative_TimeDuplicates(t *testing.T) {
+	t.Parallel()
+	s := OpenServer(NewConfig())
+	defer s.Close()
+
+	test := NewTest("db0", "rp0")
+	test.writes = Writes{
+		&Write{data: strings.Join([]string{
+			"cpuf,host=server01 value=210 1278010021000000000",
+			"cpuf,host=server02 value=210 1278010021000000000",
+			"cpuf,host=server01 value=10 1278010022000000000",
+			"cpuf,host=server02 value=10 1278010022000000000",
+			"cpui,host=server01 value=210i 1278010021000000000",
+			"cpui,host=server02 value=210i 1278010021000000000",
+			"cpui,host=server01 value=10i 1278010022000000000",
+			"cpui,host=server02 value=10i 1278010022000000000",
+		}, "\n")},
+	}
+
+	test.addQueries([]*Query{
+		&Query{
+			name:    "calculate single derivative - float",
+			command: `SELECT derivative(value) from db0.rp0.cpuf`,
+			exp:     `{"results":[{"series":[{"name":"cpuf","columns":["time","derivative"],"values":[["2010-07-01T18:47:02Z",-200]]}]}]}`,
+		},
+		&Query{
+			name:    "calculate derivative with unit - float",
+			command: `SELECT derivative(value, 10s) from db0.rp0.cpuf`,
+			exp:     `{"results":[{"series":[{"name":"cpuf","columns":["time","derivative"],"values":[["2010-07-01T18:47:02Z",-2000]]}]}]}`,
+		},
+		&Query{
+			name:    "calculate single non_negative_derivative - float",
+			command: `SELECT non_negative_derivative(value) from db0.rp0.cpuf`,
+			exp:     `{"results":[{}]}`,
+		},
+		&Query{
+			name:    "calculate non_negative_derivative with unit - float",
+			command: `SELECT non_negative_derivative(value, 10s) from db0.rp0.cpuf`,
+			exp:     `{"results":[{}]}`,
+		},
+		&Query{
+			name:    "calculate single derivative - integer",
+			command: `SELECT derivative(value) from db0.rp0.cpui`,
+			exp:     `{"results":[{"series":[{"name":"cpui","columns":["time","derivative"],"values":[["2010-07-01T18:47:02Z",-200]]}]}]}`,
+		},
+		&Query{
+			name:    "calculate derivative with unit - integer",
+			command: `SELECT derivative(value, 10s) from db0.rp0.cpui`,
+			exp:     `{"results":[{"series":[{"name":"cpui","columns":["time","derivative"],"values":[["2010-07-01T18:47:02Z",-2000]]}]}]}`,
+		},
+		&Query{
+			name:    "calculate single non_negative_derivative - integer",
+			command: `SELECT non_negative_derivative(value) from db0.rp0.cpui`,
+			exp:     `{"results":[{}]}`,
+		},
+		&Query{
+			name:    "calculate non_negative_derivative with unit - integer",
+			command: `SELECT non_negative_derivative(value, 10s) from db0.rp0.cpui`,
+			exp:     `{"results":[{}]}`,
+		},
+	}...)
+
+	for i, query := range test.queries {
+		if i == 0 {
+			if err := test.init(s); err != nil {
+				t.Fatalf("test init failed: %s", err)
+			}
+		}
+		if query.skip {
+			t.Logf("SKIP:: %s", query.name)
+			continue
+		}
+		if err := query.Execute(s); err != nil {
+			t.Error(query.Error(err))
+		} else if !query.success() {
+			t.Error(query.failureMessage())
+		}
+	}
+}
+
 // Ensure the server can handle various group by time derivative queries.
 func TestServer_Query_SelectGroupByTimeDerivative(t *testing.T) {
 	t.Parallel()

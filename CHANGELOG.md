@@ -73,6 +73,7 @@
 - [#6835](https://github.com/influxdata/influxdb/pull/6835): Include sysvinit-tools as an rpm dependency.
 - [#6834](https://github.com/influxdata/influxdb/pull/6834): Add port to all graphite log output to help with debugging multiple endpoints
 - [#6850](https://github.com/influxdata/influxdb/pull/6850): Modify the max nanosecond time to be one nanosecond less.
+- [#6846](https://github.com/influxdata/influxdb/issues/6846): Prevent derivative from emitting NaN values.
 
 ## v0.13.0 [2016-05-12]
 
