@@ -3,8 +3,11 @@ package httpd
 import (
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -24,10 +27,22 @@ type ResponseWriter interface {
 func NewResponseWriter(w http.ResponseWriter, r *http.Request) ResponseWriter {
 	pretty := r.URL.Query().Get("pretty") == "true"
 	rw := &responseWriter{ResponseWriter: w}
-	switch r.Header.Get("Accept") {
+
+	var acceptHeader string
+	if value := r.Header.Get("Accept"); value != "" {
+		mediaType, _, err := mime.ParseMediaType(value)
+		if err == nil {
+			acceptHeader = mediaType
+		}
+	}
+
+	switch acceptHeader {
 	case "application/csv", "text/csv":
 		w.Header().Add("Content-Type", "text/csv")
 		rw.formatter = &csvFormatter{statementID: -1, Writer: w}
+	case "application/vnd.influxdb.line-protocol":
+		w.Header().Add("Content-Type", "application/vnd.influxdb.line-protocol; version=1.0")
+		rw.formatter = &lineProtocolFormatter{Writer: w}
 	case "application/json":
 		fallthrough
 	default:
@@ -187,4 +202,76 @@ func (w *csvFormatter) WriteResponse(resp Response) (n int, err error) {
 		return n, err
 	}
 	return n, nil
+}
+
+type lineProtocolFormatter struct {
+	io.Writer
+}
+
+func (w *lineProtocolFormatter) WriteResponse(resp Response) (n int, err error) {
+	wr := writer{Writer: w, n: &n}
+	for _, result := range resp.Results {
+		for _, row := range result.Series {
+			var tagKeys []string
+			if len(row.Tags) > 0 {
+				tagKeys = make([]string, 0, len(row.Tags))
+				for key := range row.Tags {
+					tagKeys = append(tagKeys, key)
+				}
+			}
+			sort.Strings(tagKeys)
+
+			hasTime := row.Columns[0] == "time"
+			for _, values := range row.Values {
+				columns := row.Columns
+				var ts int64
+				if hasTime {
+					ts = values[0].(time.Time).UnixNano()
+					values = values[1:]
+					columns = columns[1:]
+				}
+
+				io.WriteString(wr, row.Name)
+				for _, key := range tagKeys {
+					fmt.Fprintf(wr, ",%s=%s", key, row.Tags[key])
+				}
+				io.WriteString(wr, " ")
+				for i, value := range values {
+					if i > 0 {
+						io.WriteString(wr, ",")
+					}
+					switch value := value.(type) {
+					case float64:
+						fmt.Fprintf(wr, "%s=%f", columns[i], value)
+					case int64:
+						fmt.Fprintf(wr, "%s=%di", columns[i], value)
+					case string:
+						fmt.Fprintf(wr, "%s='%s'", columns[i], value)
+					case bool:
+						if value {
+							fmt.Fprintf(wr, "%s='t'", columns[i])
+						} else {
+							fmt.Fprintf(wr, "%s='t'", columns[i])
+						}
+					}
+				}
+				if hasTime {
+					fmt.Fprintf(wr, " %d", ts)
+				}
+				io.WriteString(wr, "\n")
+			}
+		}
+	}
+	return n, nil
+}
+
+type writer struct {
+	io.Writer
+	n *int
+}
+
+func (w *writer) Write(data []byte) (n int, err error) {
+	n, err = w.Writer.Write(data)
+	*w.n += n
+	return n, err
 }
