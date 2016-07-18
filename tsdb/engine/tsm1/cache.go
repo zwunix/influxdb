@@ -11,23 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	//radixTree "github.com/armon/go-radix"
-
 	"github.com/influxdata/influxdb/models"
-	//"github.com/google/btree"
 )
-
-//var MERGE_CHAN_SIZE = 1
-//func init() {
-//	if s := os.Getenv("MERGE_CHAN_SIZE"); s != "" {
-//		n, err := strconv.Atoi(s)
-//		if err != nil {
-//			panic(err.Error())
-//		}
-//		MERGE_CHAN_SIZE = 
-//	}
-//	println("LOCKFREE_SHARDS is %d", LOCKFREE_SHARDS)
-//}
 
 var (
 	ErrCacheMemoryExceeded    = fmt.Errorf("cache maximum memory size exceeded")
@@ -431,7 +416,7 @@ func (c *Cache) Keys() []string {
 	// chans
 	chans := make([]chan StringHeapItem, len(c.store.buckets))
 	for i := range chans {
-		chans[i] = make(chan StringHeapItem, 10)
+		chans[i] = make(chan StringHeapItem, 100)
 	}
 
 	// use chans
@@ -447,21 +432,6 @@ func (c *Cache) Keys() []string {
 			  	ch <- x
 			  	return false
 			})
-			//	x := StringHeapItem{
-			//		key: string(key.(stringItem)),
-			//		source: ch,
-			//	}
-			//	ch <- x
-			//	return true
-			//})
-			//b.sortedStringKeys.Ascend(func(key btree.Item) bool {
-			//	x := StringHeapItem{
-			//		key: string(key.(stringItem)),
-			//		source: ch,
-			//	}
-			//	ch <- x
-			//	return true
-			//})
 			close(chans[i])
 		}(i)
 
@@ -493,13 +463,6 @@ func (c *Cache) Keys() []string {
 		b.mu.RUnlock()
 	}
 	c.mu.RUnlock()
-
-	//sort.Sort(a)
-
-	//b := make([]string, len(a))
-	//for i := range a {
-	//	b[i] = a[i].StringKey()
-	//}
 
 	end := time.Now().UnixNano()
 	took := end - start
