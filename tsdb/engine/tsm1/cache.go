@@ -378,22 +378,30 @@ func (c *Cache) MaxSize() uint64 {
 // Keys returns a sorted slice of all keys under management by the cache.
 func (c *Cache) Keys() []string {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
 
-	a := make([]string, 0)//, c.store.Len())
+	start := time.Now().UnixNano()
+	a := make(CompositeKeys, 0)//, c.store.Len())
 	f := func(ck CompositeKey, _ *entry) error {
-		k := ck.StringKey()
-		a = append(a, k)
+		//k := ck.StringKey()
+		a = append(a, ck)
 		return nil
 	}
 	c.store.Iter(f)
-	start := time.Now().UnixNano()
-	sort.Strings(a)
+
+	c.mu.RUnlock()
+
+	sort.Sort(a)
+
+	b := make([]string, len(a))
+	for i := range a {
+		b[i] = a[i].StringKey()
+	}
+
 	end := time.Now().UnixNano()
 	took := end - start
 	ms := took / 1e6
-	fmt.Printf("sort.Strings(a) took %dms\n", ms)
-	return a
+	fmt.Printf("(*Cache).Keys() took %dms\n", ms)
+	return b
 }
 
 // Values returns a copy of all values, deduped and sorted, for the given key.

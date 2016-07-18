@@ -5,6 +5,7 @@ import (
 	"hash"
 	//"hash/fnv"
 	"github.com/pierrec/xxHash/xxHash32"
+	"github.com/google/btree"
 	"os"
 	"strconv"
 	"strings"
@@ -28,6 +29,30 @@ type (
 type CompositeKey struct {
 	SeriesKey seriesKey
 	FieldKey  fieldKey
+}
+
+type CompositeKeys []CompositeKey
+
+func (cks CompositeKeys) Swap(i, j int) {
+	cks[i], cks[j] = cks[j], cks[i]
+}
+func (cks CompositeKeys) Len() int {
+	return len(cks)
+}
+func (cks CompositeKeys) Less(i, j int) bool {
+	a := cks[i]
+	b := cks[j]
+	if a.SeriesKey < b.SeriesKey {
+		return true
+	}
+	if a.SeriesKey == b.SeriesKey {
+		if a.FieldKey < b.FieldKey {
+			return true
+		}
+
+		return false
+	}
+	return false
 }
 
 // NewCompositeKey makes a composite key from normal strings.
@@ -82,6 +107,7 @@ type bucket struct {
 	count int64
 	mu sync.RWMutex
 	data map[seriesKey]*fieldData
+	sortedStringKeys *btree.BTree
 }
 
 // CacheStore is a sharded map used for storing series data in a *tsm1.Cache.
@@ -97,6 +123,11 @@ type CacheStore struct {
 	avgFieldsPerSeries int64
 	avgPointsPerField  int64
 	hasherPool         *sync.Pool
+}
+
+type stringItem string
+func (s stringItem) Less(than btree.Item) bool {
+	return strings.Compare(string(s), string(than.(stringItem))) == -1
 }
 
 // fieldData stores field-related data. An instance of this type makes up a
@@ -126,6 +157,7 @@ func NewCacheStoreWithCapacities(series, fields, points int64) CacheStore {
 	for i := range bb {
 		b := &bucket{
 			data: map[seriesKey]*fieldData{},
+			sortedStringKeys:   btree.New(2),
 		}
 		bb[i] = b
 	}
@@ -260,6 +292,7 @@ func (b bucket) putUnguarded(ck CompositeKey, e *entry) bool {
 		}
 		b.data[ck.SeriesKey] = sub
 		b.count++
+		//b.sortedStringKeys.ReplaceOrInsert(stringItem(ck.StringKey()))
 	}
 
 	sub.data[ck.FieldKey] = e
@@ -315,6 +348,7 @@ func (cs CacheStore) Delete(ck CompositeKey) {
 		delete(b.data, ck.SeriesKey)
 	}
 	b.count--
+	//b.sortedStringKeys.Delete(stringItem(ck.StringKey()))
 	b.mu.Unlock()
 }
 
