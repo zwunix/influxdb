@@ -27,7 +27,7 @@ func TestCacheStoreProperty_IdenticalToUnsharded(t *testing.T) {
 		}
 
 		// build the sharded version:
-		x := NewCacheStore()
+		x := NewCacheStoreWithCapacities(0, 0, 0)
 		for ck, vv := range orig {
 			for _, v := range vv {
 				existing := x.Get(ck)
@@ -41,13 +41,7 @@ func TestCacheStoreProperty_IdenticalToUnsharded(t *testing.T) {
 
 		// check that the lengths of the sharded and unsharded map
 		// are the same:
-		l := 0
-		f := func(_ CompositeKey, _ *entry) error {
-			l++
-			return nil
-		}
-		x.Iter(f)
-		if l != len(gold) {
+		if x.Len() != int64(len(gold)) {
 			return false
 		}
 

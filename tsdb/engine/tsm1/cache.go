@@ -31,6 +31,11 @@ type entry struct {
 func newEntry() *entry {
 	return &entry{}
 }
+func newEntryWithCapacity(n int64) *entry {
+	return &entry{
+		values: make(Values, 0, n),
+	}
+}
 
 // add adds the given values to the entry.
 func (e *entry) add(values []Value) {
@@ -71,13 +76,14 @@ func (e *entry) add(values []Value) {
 // and sorted, the function does no work and simply returns.
 func (e *entry) deduplicate() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	if !e.needSort || len(e.values) == 0 {
+		e.mu.Unlock()
 		return
 	}
 	e.values = e.values.Deduplicate()
 	e.needSort = false
+	e.mu.Unlock()
 }
 
 // count returns number of values for this entry
@@ -145,7 +151,7 @@ type Cache struct {
 func NewCache(maxSize uint64, path string) *Cache {
 	c := &Cache{
 		maxSize:      maxSize,
-		store:        make(CacheStore),
+		store:        NewCacheStoreWithCapacities(0, 0, 0),
 		stats:        &CacheStatistics{},
 		lastSnapshot: time.Now(),
 	}
@@ -228,9 +234,10 @@ func (c *Cache) WriteMulti(values map[string][]Value) error {
 		ck := StringToCompositeKey(k)
 		c.entry(ck).add(v)
 	}
-	c.mu.Lock()
-	c.size += uint64(totalSz)
-	c.mu.Unlock()
+	//c.mu.Lock()
+	atomic.AddUint64(&c.size, uint64(totalSz))
+	//c.size += uint64(totalSz)
+	//c.mu.Unlock()
 
 	// Update the memory size stat
 	c.updateMemSize(int64(totalSz))
@@ -251,16 +258,17 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	c.snapshotting = true
 	c.snapshotAttempts++ // increment the number of times we tried to do this
 
+	statA, statB, statC := c.store.Stats()
 	// If no snapshot exists, create a new one, otherwise update the existing snapshot
 	if c.snapshot == nil {
 		c.snapshot = &Cache{
-			store: make(CacheStore, len(c.store)),
+			store: NewCacheStoreWithCapacities(statA, statB, statC),
 		}
 	}
 
 	// Append the current cache values to the snapshot
 	f := func(ck CompositeKey, cacheEntry *entry) error {
-		cacheEntry.mu.RLock()
+		//cacheEntry.mu.RLock()
 		if snapshotEntry, ok := c.snapshot.store.GetChecked(ck); ok {
 			snapshotEntry.add(cacheEntry.values)
 		} else {
@@ -270,7 +278,7 @@ func (c *Cache) Snapshot() (*Cache, error) {
 		if cacheEntry.needSort {
 			c.snapshot.store.Get(ck).needSort = true
 		}
-		cacheEntry.mu.RUnlock()
+		//cacheEntry.mu.RUnlock()
 		return nil
 	}
 	err := c.store.Iter(f)
@@ -281,7 +289,8 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	snapshotSize := c.size // record the number of bytes written into a snapshot
 
 	// Reset the cache with a heuristic capacity
-	c.store = make(CacheStore, len(c.store))
+
+	c.store = NewCacheStoreWithCapacities(statA, statB, statC)
 	c.size = 0
 	c.lastSnapshot = time.Now()
 
@@ -324,8 +333,9 @@ func (c *Cache) ClearSnapshot(success bool) {
 // Size returns the number of point-calcuated bytes the cache currently uses.
 func (c *Cache) Size() uint64 {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.size
+	sz := c.size
+	c.mu.RUnlock()
+	return sz
 }
 
 // MaxSize returns the maximum number of bytes the cache may consume.
@@ -338,7 +348,7 @@ func (c *Cache) Keys() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	var a []string
+	a := make([]string, 0, c.store.Len())
 	f := func(ck CompositeKey, _ *entry) error {
 		k := ck.StringKey()
 		a = append(a, k)
@@ -353,8 +363,9 @@ func (c *Cache) Keys() []string {
 func (c *Cache) Values(key string) Values {
 	ck := StringToCompositeKey(key)
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.merged(ck)
+	vv := c.merged(ck)
+	c.mu.RUnlock()
+	return vv
 }
 
 // Delete will remove the keys from the cache
@@ -511,11 +522,12 @@ func (c *Cache) entry(ck CompositeKey) *entry {
 
 	// high-contention path: entry doesn't exist (probably), create a new
 	// one after checking again:
+	newE := newEntryWithCapacity(c.store.avgPointsPerField)
 	c.mu.Lock()
 
 	e, ok = c.store.GetChecked(ck)
 	if !ok {
-		e = newEntry()
+		e = newE
 		c.store.Put(ck, e)
 	}
 
