@@ -5,7 +5,8 @@ import (
 	"hash"
 	//"hash/fnv"
 	"github.com/pierrec/xxHash/xxHash32"
-	"github.com/google/btree"
+	//"github.com/google/btree"
+	radixTree "github.com/armon/go-radix"
 	"os"
 	"strconv"
 	"strings"
@@ -107,7 +108,7 @@ type bucket struct {
 	count int64
 	mu sync.RWMutex
 	data map[seriesKey]*fieldData
-	sortedStringKeys *btree.BTree
+	sortedStringKeys *radixTree.Tree
 }
 
 // CacheStore is a sharded map used for storing series data in a *tsm1.Cache.
@@ -125,10 +126,10 @@ type CacheStore struct {
 	hasherPool         *sync.Pool
 }
 
-type stringItem string
-func (s stringItem) Less(than btree.Item) bool {
-	return strings.Compare(string(s), string(than.(stringItem))) == -1
-}
+//type stringItem string
+//func (s stringItem) Less(than btree.Item) bool {
+//	return strings.Compare(string(s), string(than.(stringItem))) == -1
+//}
 
 // fieldData stores field-related data. An instance of this type makes up a
 // 'shard' in a CacheStore.
@@ -157,7 +158,7 @@ func NewCacheStoreWithCapacities(series, fields, points int64) CacheStore {
 	for i := range bb {
 		b := &bucket{
 			data: map[seriesKey]*fieldData{},
-			sortedStringKeys:   btree.New(2),
+			sortedStringKeys:   radixTree.New(),
 		}
 		bb[i] = b
 	}
@@ -292,7 +293,7 @@ func (b bucket) putUnguarded(ck CompositeKey, e *entry) bool {
 		}
 		b.data[ck.SeriesKey] = sub
 		b.count++
-		b.sortedStringKeys.ReplaceOrInsert(stringItem(ck.StringKey()))
+		b.sortedStringKeys.Insert(ck.StringKey(), struct{}{})
 	}
 
 	sub.data[ck.FieldKey] = e
@@ -348,7 +349,7 @@ func (cs CacheStore) Delete(ck CompositeKey) {
 		delete(b.data, ck.SeriesKey)
 	}
 	b.count--
-	b.sortedStringKeys.Delete(stringItem(ck.StringKey()))
+	b.sortedStringKeys.Delete(ck.StringKey())
 	b.mu.Unlock()
 }
 

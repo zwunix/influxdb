@@ -11,9 +11,23 @@ import (
 	"sync/atomic"
 	"time"
 
+	//radixTree "github.com/armon/go-radix"
+
 	"github.com/influxdata/influxdb/models"
-	"github.com/google/btree"
+	//"github.com/google/btree"
 )
+
+//var MERGE_CHAN_SIZE = 1
+//func init() {
+//	if s := os.Getenv("MERGE_CHAN_SIZE"); s != "" {
+//		n, err := strconv.Atoi(s)
+//		if err != nil {
+//			panic(err.Error())
+//		}
+//		MERGE_CHAN_SIZE = 
+//	}
+//	println("LOCKFREE_SHARDS is %d", LOCKFREE_SHARDS)
+//}
 
 var (
 	ErrCacheMemoryExceeded    = fmt.Errorf("cache maximum memory size exceeded")
@@ -417,7 +431,7 @@ func (c *Cache) Keys() []string {
 	// chans
 	chans := make([]chan StringHeapItem, len(c.store.buckets))
 	for i := range chans {
-		chans[i] = make(chan StringHeapItem, 100)
+		chans[i] = make(chan StringHeapItem, 10)
 	}
 
 	// use chans
@@ -425,14 +439,29 @@ func (c *Cache) Keys() []string {
 		go func(i int) {
 			b := c.store.buckets[i]
 			ch := chans[i]
-			b.sortedStringKeys.Ascend(func(key btree.Item) bool {
-				x := StringHeapItem{
-					key: string(key.(stringItem)),
-					source: ch,
-				}
-				ch <- x
-				return true
+			b.sortedStringKeys.Walk(func(key string, _ interface{}) bool {
+			  	x := StringHeapItem{
+			  		key: key,
+			  		source: ch,
+			  	}
+			  	ch <- x
+			  	return false
 			})
+			//	x := StringHeapItem{
+			//		key: string(key.(stringItem)),
+			//		source: ch,
+			//	}
+			//	ch <- x
+			//	return true
+			//})
+			//b.sortedStringKeys.Ascend(func(key btree.Item) bool {
+			//	x := StringHeapItem{
+			//		key: string(key.(stringItem)),
+			//		source: ch,
+			//	}
+			//	ch <- x
+			//	return true
+			//})
 			close(chans[i])
 		}(i)
 
