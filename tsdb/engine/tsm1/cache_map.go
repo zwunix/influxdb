@@ -6,9 +6,9 @@ import (
 	//"hash/fnv"
 	"github.com/pierrec/xxHash/xxHash32"
 	"os"
-	"sync"
-	"strings"
 	"strconv"
+	"strings"
+	"sync"
 	"unsafe"
 )
 
@@ -78,16 +78,24 @@ func init() {
 	println("LOCKFREE_SHARDS is %d", LOCKFREE_SHARDS)
 }
 
+type bucket struct {
+	mu sync.RWMutex
+	data map[seriesKey]*fieldData
+}
+
 // CacheStore is a sharded map used for storing series data in a *tsm1.Cache.
 // It breaks away from previous tsm1.Cache designs by namespacing the keys into
 // parts, using CompositeKey, which allows for less contention on the root
 // map instance. Using this type is a speed improvement over the previous
 // map[string]*entry type that the tsm1.Cache used.
 type CacheStore struct {
-	buckets []map[seriesKey]*fieldData
+	mu sync.RWMutex
+
+	buckets   []*bucket
+
 	avgFieldsPerSeries int64
-	avgPointsPerField int64
-	hasherPool *sync.Pool
+	avgPointsPerField  int64
+	hasherPool         *sync.Pool
 }
 
 // fieldData stores field-related data. An instance of this type makes up a
@@ -102,25 +110,30 @@ type fieldData struct {
 func NewCacheStoreWithCapacities(series, fields, points int64) CacheStore {
 	hasherPool := globalHasherPool
 	var avgSeriesPerBucket, avgFieldsPerSeries int64
+	_ = avgSeriesPerBucket
 	var avgPointsPerField int64
 	if series > 0 {
 		avgSeriesPerBucket = series / int64(LOCKFREE_SHARDS)
 	}
 	if series > 0 && fields > 0 {
 		avgFieldsPerSeries = fields / series
-}
+	}
 	if series > 0 && fields > 0 && points > 0 {
 		avgPointsPerField = points / fields
 	}
-	bb := make([]map[seriesKey]*fieldData, LOCKFREE_SHARDS)
+	bb := make([]*bucket, LOCKFREE_SHARDS)
 	for i := range bb {
-		bb[i] = make(map[seriesKey]*fieldData, avgSeriesPerBucket)
+		b := &bucket{
+			data: map[seriesKey]*fieldData{},
+		}
+		bb[i] = b
 	}
 	return CacheStore{
-		buckets: bb,
+		mu:                 sync.RWMutex{},
+		buckets:            bb,
 		avgFieldsPerSeries: avgFieldsPerSeries,
-		avgPointsPerField: avgPointsPerField,
-		hasherPool: hasherPool,
+		avgPointsPerField:  avgPointsPerField,
+		hasherPool:         hasherPool,
 	}
 }
 
@@ -143,18 +156,22 @@ func (cs CacheStore) bucketId(ck CompositeKey) uint32 {
 	return m
 }
 
-func (cs CacheStore) bucketFor(ck CompositeKey) map[seriesKey]*fieldData {
+func (cs CacheStore) bucketFor(ck CompositeKey) *bucket {
 	return cs.buckets[cs.bucketId(ck)]
 }
 
 // Len computes the total number of elements.
 func (cs CacheStore) Len() int64 {
 	var n int64
+	//cs.mu.RLock()
 	for _, b := range cs.buckets {
-		for _, sub := range b {
+		b.mu.RLock()
+		for _, sub := range b.data {
 			n += int64(len(sub.data))
 		}
+		b.mu.RUnlock()
 	}
+	//cs.mu.RUnlock()
 	return n
 }
 
@@ -166,8 +183,8 @@ func (cs CacheStore) Stats() (int64, int64, int64) {
 	var fields int64
 	var points int64
 	for _, b := range cs.buckets {
-		series += int64(len(b))
-		for _, sub := range b {
+		series += int64(len(b.data))
+		for _, sub := range b.data {
 			fields += int64(len(sub.data))
 			//for _, e := range sub.data {
 			//	points += int64(len(e.values))
@@ -176,7 +193,6 @@ func (cs CacheStore) Stats() (int64, int64, int64) {
 	}
 	return series, fields, points
 }
-
 
 // Get fetches the value associated with the CacheStore, if any. It is
 // equivalent to the one-variable form of a Go map access.
@@ -191,42 +207,96 @@ func (cs CacheStore) Get(ck CompositeKey) *entry {
 // Get fetches the value associated with the CacheStore. It is equivalent to
 // the two-variable form of a Go map access.
 func (cs CacheStore) GetChecked(ck CompositeKey) (*entry, bool) {
+	//cs.mu.RLock()
 	b := cs.bucketFor(ck)
-	sub, ok := b[ck.SeriesKey]
+	b.mu.RLock()
+
+	sub, ok := b.data[ck.SeriesKey]
 	if sub == nil || !ok {
+		b.mu.RUnlock()
+		//cs.mu.RUnlock()
 		return nil, false
 	}
 	e, ok2 := sub.data[ck.FieldKey]
 	if e == nil || !ok2 {
+		b.mu.RUnlock()
+		//cs.mu.RUnlock()
 		return e, false
 	}
+	b.mu.RUnlock()
+	//cs.mu.RUnlock()
 	return e, true
 }
 
 // Put puts the given value into the CacheStore.
 func (cs CacheStore) Put(ck CompositeKey, e *entry) {
 	b := cs.bucketFor(ck)
-	sub, ok := b[ck.SeriesKey]
+	b.mu.Lock()
+	b.putUnguarded(ck, e)
+	b.mu.Unlock()
+}
+
+func (b bucket) putUnguarded(ck CompositeKey, e *entry) {
+	sub, ok := b.data[ck.SeriesKey]
 	if sub == nil || !ok {
 		sub = &fieldData{
-			data: make(map[fieldKey]*entry, cs.avgFieldsPerSeries),
+			data: make(map[fieldKey]*entry, 0),
 		}
-		b[ck.SeriesKey] = sub
+		b.data[ck.SeriesKey] = sub
 	}
+
 	sub.data[ck.FieldKey] = e
+}
+
+// GetOrPut fetches a value, or replaces it with the provided default, while
+// holding a lock.
+func (cs CacheStore) GetOrPut(ck CompositeKey, maker func() *entry) *entry {
+	b := cs.bucketFor(ck)
+	hasItem := func() (*entry, bool) {
+		sub, ok := b.data[ck.SeriesKey]
+		if sub == nil || !ok {
+			return nil, false
+		}
+		e, ok2 := sub.data[ck.FieldKey]
+		return e, ok2
+	}
+
+	b.mu.RLock()
+	e, ok := hasItem()
+	b.mu.RUnlock()
+	if ok {
+		return e
+	}
+
+	b.mu.Lock()
+	e, ok = hasItem()
+	if ok {
+		b.mu.Unlock()
+		return e
+	}
+
+	e = maker()
+	b.putUnguarded(ck, e)
+	b.mu.Unlock()
+
+	return e
 }
 
 // Delete deletes the given key from the CacheStore, if applicable.
 func (cs CacheStore) Delete(ck CompositeKey) {
 	b := cs.bucketFor(ck)
-	sub, ok := b[ck.SeriesKey]
+	b.mu.Lock()
+
+	sub, ok := b.data[ck.SeriesKey]
 	if sub == nil || !ok {
+		b.mu.Unlock()
 		return
 	}
 	delete(sub.data, ck.FieldKey)
 	if len(sub.data) == 0 {
-		delete(b, ck.SeriesKey)
+		delete(b.data, ck.SeriesKey)
 	}
+	b.mu.Unlock()
 }
 
 // Iter iterates over (key, value) pairs in the CacheStore. It takes a
@@ -235,7 +305,8 @@ func (cs CacheStore) Delete(ck CompositeKey) {
 // statement with the normal Go map.
 func (cs CacheStore) Iter(f func(CompositeKey, *entry) error) error {
 	for _, bucket := range cs.buckets {
-		for seriesKey, sub := range bucket {
+		bucket.mu.RLock()
+		for seriesKey, sub := range bucket.data {
 			for fieldKey, e := range sub.data {
 				ck := CompositeKey{
 					SeriesKey: seriesKey,
@@ -247,6 +318,7 @@ func (cs CacheStore) Iter(f func(CompositeKey, *entry) error) error {
 				}
 			}
 		}
+		bucket.mu.RUnlock()
 	}
 	return nil
 }

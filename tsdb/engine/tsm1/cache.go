@@ -511,29 +511,27 @@ func (c *Cache) write(ck CompositeKey, values []Value) {
 }
 
 func (c *Cache) entry(ck CompositeKey) *entry {
-	// low-contention path: entry exists, no write operations needed:
-	c.mu.RLock()
-	e, ok := c.store.GetChecked(ck)
-	c.mu.RUnlock()
-
-	if ok {
-		return e
-	}
-
-	// high-contention path: entry doesn't exist (probably), create a new
-	// one after checking again:
-	newE := newEntryWithCapacity(c.store.avgPointsPerField)
-	c.mu.Lock()
-
-	e, ok = c.store.GetChecked(ck)
-	if !ok {
-		e = newE
-		c.store.Put(ck, e)
-	}
-
-	c.mu.Unlock()
-
+	e := c.store.GetOrPut(ck, newEntry)
 	return e
+//	// low-contention path: entry exists, no write operations needed:
+//	//c.mu.RLock()
+//	e, ok := c.store.GetChecked(ck)
+//	//c.mu.RUnlock()
+//
+//	if ok {
+//		return e
+//	}
+//
+//	// high-contention path: entry doesn't exist (probably), create a new
+//	// one after checking again:
+//	newE := newEntryWithCapacity(c.store.avgPointsPerField)
+//	//c.mu.Lock()
+//
+//	e = c.store.GetOrPut(ck, newE)
+//
+////	c.mu.Unlock()
+//
+//	return e
 }
 
 // CacheLoader processes a set of WAL segment files, and loads a cache with the data
