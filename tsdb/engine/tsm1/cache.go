@@ -72,6 +72,38 @@ func (e *entry) add(values []Value) {
 	e.mu.Unlock()
 }
 
+func (e *entry) addUnguarded(values []Value) {
+	// See if the new values are sorted or contain duplicate timestamps
+	var (
+		prevTime int64
+		needSort bool
+	)
+
+	for _, v := range values {
+		if v.UnixNano() <= prevTime {
+			needSort = true
+			break
+		}
+		prevTime = v.UnixNano()
+	}
+
+	// if there are existing values make sure they're all less than the first of
+	// the new values being added
+	if needSort {
+		e.needSort = needSort
+	}
+	if len(e.values) == 0 {
+		e.values = values
+	} else {
+		l := len(e.values)
+		lastValTime := e.values[l-1].UnixNano()
+		if lastValTime >= values[0].UnixNano() {
+			e.needSort = true
+		}
+		e.values = append(e.values, values...)
+	}
+}
+
 // deduplicate sorts and orders the entry's values. If values are already deduped and
 // and sorted, the function does no work and simply returns.
 func (e *entry) deduplicate() {
@@ -234,10 +266,10 @@ func (c *Cache) WriteMulti(values map[string][]Value) error {
 		ck := StringToCompositeKey(k)
 		c.entry(ck).add(v)
 	}
-	//c.mu.Lock()
-	atomic.AddUint64(&c.size, uint64(totalSz))
-	//c.size += uint64(totalSz)
-	//c.mu.Unlock()
+	c.mu.Lock()
+	//atomic.AddUint64(&c.size, uint64(totalSz))
+	c.size += uint64(totalSz)
+	c.mu.Unlock()
 
 	// Update the memory size stat
 	c.updateMemSize(int64(totalSz))
@@ -269,14 +301,15 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	// Append the current cache values to the snapshot
 	f := func(ck CompositeKey, cacheEntry *entry) error {
 		//cacheEntry.mu.RLock()
-		if snapshotEntry, ok := c.snapshot.store.GetChecked(ck); ok {
-			snapshotEntry.add(cacheEntry.values)
+		if snapshotEntry, ok := c.snapshot.store.GetCheckedUnguarded(ck); ok {
+			snapshotEntry.addUnguarded(cacheEntry.values)
 		} else {
-			c.snapshot.store.Put(ck, cacheEntry)
+			c.snapshot.store.putUnguarded(ck, cacheEntry)
 		}
 		c.snapshotSize += uint64(Values(cacheEntry.values).Size())
 		if cacheEntry.needSort {
-			c.snapshot.store.Get(ck).needSort = true
+			x, _ := c.snapshot.store.GetCheckedUnguarded(ck)
+			x.needSort = true
 		}
 		//cacheEntry.mu.RUnlock()
 		return nil
@@ -289,7 +322,6 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	snapshotSize := c.size // record the number of bytes written into a snapshot
 
 	// Reset the cache with a heuristic capacity
-
 	c.store = NewCacheStoreWithCapacities(statA, statB, statC)
 	c.size = 0
 	c.lastSnapshot = time.Now()
@@ -348,14 +380,19 @@ func (c *Cache) Keys() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	a := make([]string, 0, c.store.Len())
+	a := make([]string, 0)//, c.store.Len())
 	f := func(ck CompositeKey, _ *entry) error {
 		k := ck.StringKey()
 		a = append(a, k)
 		return nil
 	}
 	c.store.Iter(f)
+	start := time.Now().UnixNano()
 	sort.Strings(a)
+	end := time.Now().UnixNano()
+	took := end - start
+	ms := took / 1e6
+	fmt.Printf("sort.Strings(a) took %dms\n", ms)
 	return a
 }
 

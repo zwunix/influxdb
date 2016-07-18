@@ -79,6 +79,7 @@ func init() {
 }
 
 type bucket struct {
+	count int64
 	mu sync.RWMutex
 	data map[seriesKey]*fieldData
 }
@@ -163,7 +164,6 @@ func (cs CacheStore) bucketFor(ck CompositeKey) *bucket {
 // Len computes the total number of elements.
 func (cs CacheStore) Len() int64 {
 	var n int64
-	//cs.mu.RLock()
 	for _, b := range cs.buckets {
 		b.mu.RLock()
 		for _, sub := range b.data {
@@ -171,27 +171,21 @@ func (cs CacheStore) Len() int64 {
 		}
 		b.mu.RUnlock()
 	}
-	//cs.mu.RUnlock()
 	return n
 }
 
 // Stats computes the number of elements at each level, for use with
 // NewCacheStoreWithCapacity.
 func (cs CacheStore) Stats() (int64, int64, int64) {
-	return 0, 0, 0
+	return 0,0,0
 	var series int64
 	var fields int64
-	var points int64
 	for _, b := range cs.buckets {
-		series += int64(len(b.data))
-		for _, sub := range b.data {
-			fields += int64(len(sub.data))
-			//for _, e := range sub.data {
-			//	points += int64(len(e.values))
-			//}
-		}
+		b.mu.RLock()
+		series += int64(b.count)
+		b.mu.RUnlock()
 	}
-	return series, fields, points
+	return series, fields, 0
 }
 
 // Get fetches the value associated with the CacheStore, if any. It is
@@ -227,6 +221,23 @@ func (cs CacheStore) GetChecked(ck CompositeKey) (*entry, bool) {
 	//cs.mu.RUnlock()
 	return e, true
 }
+func (cs CacheStore) GetCheckedUnguarded(ck CompositeKey) (*entry, bool) {
+	//cs.mu.RLock()
+	b := cs.bucketFor(ck)
+
+	sub, ok := b.data[ck.SeriesKey]
+	if sub == nil || !ok {
+		//cs.mu.RUnlock()
+		return nil, false
+	}
+	e, ok2 := sub.data[ck.FieldKey]
+	if e == nil || !ok2 {
+		//cs.mu.RUnlock()
+		return e, false
+	}
+	//cs.mu.RUnlock()
+	return e, true
+}
 
 // Put puts the given value into the CacheStore.
 func (cs CacheStore) Put(ck CompositeKey, e *entry) {
@@ -236,16 +247,23 @@ func (cs CacheStore) Put(ck CompositeKey, e *entry) {
 	b.mu.Unlock()
 }
 
-func (b bucket) putUnguarded(ck CompositeKey, e *entry) {
+func (cs CacheStore) putUnguarded(ck CompositeKey, e *entry) {
+	b := cs.bucketFor(ck)
+	b.putUnguarded(ck, e)
+}
+
+func (b bucket) putUnguarded(ck CompositeKey, e *entry) bool {
 	sub, ok := b.data[ck.SeriesKey]
 	if sub == nil || !ok {
 		sub = &fieldData{
 			data: make(map[fieldKey]*entry, 0),
 		}
 		b.data[ck.SeriesKey] = sub
+		b.count++
 	}
 
 	sub.data[ck.FieldKey] = e
+	return ok
 }
 
 // GetOrPut fetches a value, or replaces it with the provided default, while
@@ -296,6 +314,7 @@ func (cs CacheStore) Delete(ck CompositeKey) {
 	if len(sub.data) == 0 {
 		delete(b.data, ck.SeriesKey)
 	}
+	b.count--
 	b.mu.Unlock()
 }
 
@@ -304,15 +323,14 @@ func (cs CacheStore) Delete(ck CompositeKey) {
 // callback returns an error. It is equivalent to the two-variable range
 // statement with the normal Go map.
 func (cs CacheStore) Iter(f func(CompositeKey, *entry) error) error {
+	ck := &CompositeKey{}
 	for _, bucket := range cs.buckets {
 		bucket.mu.RLock()
 		for seriesKey, sub := range bucket.data {
 			for fieldKey, e := range sub.data {
-				ck := CompositeKey{
-					SeriesKey: seriesKey,
-					FieldKey:  fieldKey,
-				}
-				err := f(ck, e)
+				ck.SeriesKey = seriesKey
+				ck.FieldKey = fieldKey
+				err := f(*ck, e)
 				if err != nil {
 					return err
 				}
