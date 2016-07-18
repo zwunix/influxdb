@@ -292,7 +292,7 @@ func (b bucket) putUnguarded(ck CompositeKey, e *entry) bool {
 		}
 		b.data[ck.SeriesKey] = sub
 		b.count++
-		//b.sortedStringKeys.ReplaceOrInsert(stringItem(ck.StringKey()))
+		b.sortedStringKeys.ReplaceOrInsert(stringItem(ck.StringKey()))
 	}
 
 	sub.data[ck.FieldKey] = e
@@ -348,7 +348,7 @@ func (cs CacheStore) Delete(ck CompositeKey) {
 		delete(b.data, ck.SeriesKey)
 	}
 	b.count--
-	//b.sortedStringKeys.Delete(stringItem(ck.StringKey()))
+	b.sortedStringKeys.Delete(stringItem(ck.StringKey()))
 	b.mu.Unlock()
 }
 

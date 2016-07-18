@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/influxdata/influxdb/models"
+	"github.com/google/btree"
 )
 
 var (
@@ -375,33 +376,108 @@ func (c *Cache) MaxSize() uint64 {
 	return c.maxSize
 }
 
+type StringHeapItem struct {
+	key string
+	source chan StringHeapItem
+}
+type StringHeap []StringHeapItem
+
+func (h StringHeap) Len() int           { return len(h) }
+func (h StringHeap) Less(i, j int) bool { return h[i].key < h[j].key }
+func (h StringHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *StringHeap) Push(x interface{}) {
+	// Push and Pop use pointer receivers because they modify the slice's length,
+	// not just its contents.
+	*h = append(*h, x.(StringHeapItem))
+}
+
+func (h *StringHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
 // Keys returns a sorted slice of all keys under management by the cache.
 func (c *Cache) Keys() []string {
 	c.mu.RLock()
 
 	start := time.Now().UnixNano()
-	a := make(CompositeKeys, 0)//, c.store.Len())
-	f := func(ck CompositeKey, _ *entry) error {
-		//k := ck.StringKey()
-		a = append(a, ck)
-		return nil
-	}
-	c.store.Iter(f)
 
+	for _, b := range c.store.buckets {
+		b.mu.RLock()
+	}
+	var l int64
+	for _, b := range c.store.buckets {
+		l += int64(b.sortedStringKeys.Len())
+	}
+	a := make([]string, l)
+
+	// chans
+	chans := make([]chan StringHeapItem, len(c.store.buckets))
+	for i := range chans {
+		chans[i] = make(chan StringHeapItem, 100)
+	}
+
+	// use chans
+	for i := range c.store.buckets {
+		go func(i int) {
+			b := c.store.buckets[i]
+			ch := chans[i]
+			b.sortedStringKeys.Ascend(func(key btree.Item) bool {
+				x := StringHeapItem{
+					key: string(key.(stringItem)),
+					source: ch,
+				}
+				ch <- x
+				return true
+			})
+			close(chans[i])
+		}(i)
+
+	}
+
+	h := &StringHeap{}
+	for i := range chans {
+		x, ok := <- chans[i]
+		if !ok {
+			continue
+		}
+		h.Push(x)
+	}
+
+	for i := 0; i < len(a); i++ {
+		top := h.Pop().(StringHeapItem)
+		a[i] = top.key
+
+		next, ok := <- top.source
+		if !ok {
+			// this channel is empty
+			continue
+		}
+		top.key = next.key
+		h.Push(top)
+	}
+
+	for _, b := range c.store.buckets {
+		b.mu.RUnlock()
+	}
 	c.mu.RUnlock()
 
-	sort.Sort(a)
+	//sort.Sort(a)
 
-	b := make([]string, len(a))
-	for i := range a {
-		b[i] = a[i].StringKey()
-	}
+	//b := make([]string, len(a))
+	//for i := range a {
+	//	b[i] = a[i].StringKey()
+	//}
 
 	end := time.Now().UnixNano()
 	took := end - start
 	ms := took / 1e6
 	fmt.Printf("(*Cache).Keys() took %dms\n", ms)
-	return b
+	_ = sort.Strings
+	return a
 }
 
 // Values returns a copy of all values, deduped and sorted, for the given key.
