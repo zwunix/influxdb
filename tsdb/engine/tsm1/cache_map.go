@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"hash"
 	"math/rand"
-	//"hash/fnv"
 	"os"
 	"strconv"
 	"strings"
