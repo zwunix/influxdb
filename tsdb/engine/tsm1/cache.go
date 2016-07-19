@@ -31,11 +31,6 @@ type entry struct {
 func newEntry() *entry {
 	return &entry{}
 }
-func newEntryWithCapacity(n int64) *entry {
-	return &entry{
-		values: make(Values, 0, n),
-	}
-}
 
 // add adds the given values to the entry.
 func (e *entry) add(values []Value) {
@@ -183,7 +178,7 @@ type Cache struct {
 func NewCache(maxSize uint64, path string) *Cache {
 	c := &Cache{
 		maxSize:      maxSize,
-		store:        NewCacheStoreWithCapacities(0, 0, 0),
+		store:        NewCacheStore(),
 		stats:        &CacheStatistics{},
 		lastSnapshot: time.Now(),
 	}
@@ -290,28 +285,30 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	c.snapshotting = true
 	c.snapshotAttempts++ // increment the number of times we tried to do this
 
-	statA, statB, statC := c.store.Stats()
 	// If no snapshot exists, create a new one, otherwise update the existing snapshot
 	if c.snapshot == nil {
 		c.snapshot = &Cache{
-			store: NewCacheStoreWithCapacities(statA, statB, statC),
+			store: NewCacheStore(),
 		}
 	}
 
 	// Append the current cache values to the snapshot
 	f := func(ck CompositeKey, cacheEntry *entry) error {
-		//cacheEntry.mu.RLock()
-		if snapshotEntry, ok := c.snapshot.store.GetCheckedUnguarded(ck); ok {
+		// TODO(rw): is this RLock necessary? The Cache is RWLock'ed.
+		cacheEntry.mu.RLock()
+
+		if snapshotEntry, ok := c.snapshot.store.UnguardedGetChecked(ck); ok {
 			snapshotEntry.addUnguarded(cacheEntry.values)
 		} else {
-			c.snapshot.store.putUnguarded(ck, cacheEntry)
+			c.snapshot.store.UnguardedPut(ck, cacheEntry)
 		}
 		c.snapshotSize += uint64(Values(cacheEntry.values).Size())
 		if cacheEntry.needSort {
-			x, _ := c.snapshot.store.GetCheckedUnguarded(ck)
+			x, _ := c.snapshot.store.UnguardedGetChecked(ck)
 			x.needSort = true
 		}
-		//cacheEntry.mu.RUnlock()
+
+		cacheEntry.mu.RUnlock()
 		return nil
 	}
 	err := c.store.Iter(f)
@@ -321,8 +318,8 @@ func (c *Cache) Snapshot() (*Cache, error) {
 
 	snapshotSize := c.size // record the number of bytes written into a snapshot
 
-	// Reset the cache with a heuristic capacity
-	c.store = NewCacheStoreWithCapacities(statA, statB, statC)
+	// Reset the cache
+	c.store = NewCacheStore()
 	c.size = 0
 	c.lastSnapshot = time.Now()
 
@@ -437,7 +434,7 @@ func (c *Cache) Keys() []string {
 
 	}
 
-	h := &StringHeap{}
+	h := make(StringHeap, 0, len(c.store.buckets))
 	for i := range chans {
 		x, ok := <- chans[i]
 		if !ok {
@@ -624,27 +621,7 @@ func (c *Cache) write(ck CompositeKey, values []Value) {
 }
 
 func (c *Cache) entry(ck CompositeKey) *entry {
-	e := c.store.GetOrPut(ck, newEntry)
-	return e
-//	// low-contention path: entry exists, no write operations needed:
-//	//c.mu.RLock()
-//	e, ok := c.store.GetChecked(ck)
-//	//c.mu.RUnlock()
-//
-//	if ok {
-//		return e
-//	}
-//
-//	// high-contention path: entry doesn't exist (probably), create a new
-//	// one after checking again:
-//	newE := newEntryWithCapacity(c.store.avgPointsPerField)
-//	//c.mu.Lock()
-//
-//	e = c.store.GetOrPut(ck, newE)
-//
-////	c.mu.Unlock()
-//
-//	return e
+	return c.store.GetOrPut(ck, newEntry)
 }
 
 // CacheLoader processes a set of WAL segment files, and loads a cache with the data

@@ -32,30 +32,6 @@ type CompositeKey struct {
 	FieldKey  fieldKey
 }
 
-type CompositeKeys []CompositeKey
-
-func (cks CompositeKeys) Swap(i, j int) {
-	cks[i], cks[j] = cks[j], cks[i]
-}
-func (cks CompositeKeys) Len() int {
-	return len(cks)
-}
-func (cks CompositeKeys) Less(i, j int) bool {
-	a := cks[i]
-	b := cks[j]
-	if a.SeriesKey < b.SeriesKey {
-		return true
-	}
-	if a.SeriesKey == b.SeriesKey {
-		if a.FieldKey < b.FieldKey {
-			return true
-		}
-
-		return false
-	}
-	return false
-}
-
 // NewCompositeKey makes a composite key from normal strings.
 func NewCompositeKey(l, v string) CompositeKey {
 	return CompositeKey{
@@ -117,19 +93,10 @@ type bucket struct {
 // map instance. Using this type is a speed improvement over the previous
 // map[string]*entry type that the tsm1.Cache used.
 type CacheStore struct {
-	mu sync.RWMutex
-
 	buckets   []*bucket
-
-	avgFieldsPerSeries int64
-	avgPointsPerField  int64
+	mu sync.RWMutex
 	hasherPool         *sync.Pool
 }
-
-//type stringItem string
-//func (s stringItem) Less(than btree.Item) bool {
-//	return strings.Compare(string(s), string(than.(stringItem))) == -1
-//}
 
 // fieldData stores field-related data. An instance of this type makes up a
 // 'shard' in a CacheStore.
@@ -140,20 +107,8 @@ type fieldData struct {
 }
 
 // NewCacheStore creates a new CacheStore.
-func NewCacheStoreWithCapacities(series, fields, points int64) CacheStore {
+func NewCacheStore() CacheStore {
 	hasherPool := globalHasherPool
-	var avgSeriesPerBucket, avgFieldsPerSeries int64
-	_ = avgSeriesPerBucket
-	var avgPointsPerField int64
-	if series > 0 {
-		avgSeriesPerBucket = series / int64(LOCKFREE_SHARDS)
-	}
-	if series > 0 && fields > 0 {
-		avgFieldsPerSeries = fields / series
-	}
-	if series > 0 && fields > 0 && points > 0 {
-		avgPointsPerField = points / fields
-	}
 	bb := make([]*bucket, LOCKFREE_SHARDS)
 	for i := range bb {
 		b := &bucket{
@@ -165,8 +120,6 @@ func NewCacheStoreWithCapacities(series, fields, points int64) CacheStore {
 	return CacheStore{
 		mu:                 sync.RWMutex{},
 		buckets:            bb,
-		avgFieldsPerSeries: avgFieldsPerSeries,
-		avgPointsPerField:  avgPointsPerField,
 		hasherPool:         hasherPool,
 	}
 }
@@ -207,19 +160,6 @@ func (cs CacheStore) Len() int64 {
 	return n
 }
 
-// Stats computes the number of elements at each level, for use with
-// NewCacheStoreWithCapacity.
-func (cs CacheStore) Stats() (int64, int64, int64) {
-	return 0,0,0
-	var series int64
-	var fields int64
-	for _, b := range cs.buckets {
-		b.mu.RLock()
-		series += int64(b.count)
-		b.mu.RUnlock()
-	}
-	return series, fields, 0
-}
 
 // Get fetches the value associated with the CacheStore, if any. It is
 // equivalent to the one-variable form of a Go map access.
@@ -254,21 +194,17 @@ func (cs CacheStore) GetChecked(ck CompositeKey) (*entry, bool) {
 	//cs.mu.RUnlock()
 	return e, true
 }
-func (cs CacheStore) GetCheckedUnguarded(ck CompositeKey) (*entry, bool) {
-	//cs.mu.RLock()
+func (cs CacheStore) UnguardedGetChecked(ck CompositeKey) (*entry, bool) {
 	b := cs.bucketFor(ck)
 
 	sub, ok := b.data[ck.SeriesKey]
 	if sub == nil || !ok {
-		//cs.mu.RUnlock()
 		return nil, false
 	}
 	e, ok2 := sub.data[ck.FieldKey]
 	if e == nil || !ok2 {
-		//cs.mu.RUnlock()
 		return e, false
 	}
-	//cs.mu.RUnlock()
 	return e, true
 }
 
@@ -276,16 +212,16 @@ func (cs CacheStore) GetCheckedUnguarded(ck CompositeKey) (*entry, bool) {
 func (cs CacheStore) Put(ck CompositeKey, e *entry) {
 	b := cs.bucketFor(ck)
 	b.mu.Lock()
-	b.putUnguarded(ck, e)
+	b.unguardedPut(ck, e)
 	b.mu.Unlock()
 }
 
-func (cs CacheStore) putUnguarded(ck CompositeKey, e *entry) {
+func (cs CacheStore) UnguardedPut(ck CompositeKey, e *entry) {
 	b := cs.bucketFor(ck)
-	b.putUnguarded(ck, e)
+	b.unguardedPut(ck, e)
 }
 
-func (b bucket) putUnguarded(ck CompositeKey, e *entry) bool {
+func (b bucket) unguardedPut(ck CompositeKey, e *entry) bool {
 	sub, ok := b.data[ck.SeriesKey]
 	if sub == nil || !ok {
 		sub = &fieldData{
@@ -301,8 +237,9 @@ func (b bucket) putUnguarded(ck CompositeKey, e *entry) bool {
 }
 
 // GetOrPut fetches a value, or replaces it with the provided default, while
-// holding a lock.
-func (cs CacheStore) GetOrPut(ck CompositeKey, maker func() *entry) *entry {
+// holding the minimal number of locks. Note that `makerFunc` may be called
+// and its result discarded.
+func (cs CacheStore) GetOrPut(ck CompositeKey, makerFunc func() *entry) *entry {
 	b := cs.bucketFor(ck)
 	hasItem := func() (*entry, bool) {
 		sub, ok := b.data[ck.SeriesKey]
@@ -320,18 +257,24 @@ func (cs CacheStore) GetOrPut(ck CompositeKey, maker func() *entry) *entry {
 		return e
 	}
 
+	// generate the new element outside of the lock, to minimize critical
+	// path time (this means the new element could be discarded):
+	newE := makerFunc()
+
+	// the item wasn't there before, did it get added in the meantime?
 	b.mu.Lock()
 	e, ok = hasItem()
 	if ok {
+		// yes, it's there now. return it.
 		b.mu.Unlock()
 		return e
 	}
 
-	e = maker()
-	b.putUnguarded(ck, e)
-	b.mu.Unlock()
+	// no, we need to make the item, then store it, then return it:
+	b.unguardedPut(ck, newE)
 
-	return e
+	b.mu.Unlock()
+	return newE
 }
 
 // Delete deletes the given key from the CacheStore, if applicable.

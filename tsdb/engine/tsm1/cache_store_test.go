@@ -27,7 +27,7 @@ func TestCacheStoreProperty_IdenticalToUnsharded(t *testing.T) {
 		}
 
 		// build the sharded version:
-		x := NewCacheStoreWithCapacities(0, 0, 0)
+		x := NewCacheStore()
 		for ck, vv := range orig {
 			for _, v := range vv {
 				existing := x.Get(ck)
