@@ -88,10 +88,10 @@ type bucket struct {
 // map instance. Using this type is a speed improvement over the previous
 // map[string]*entry type that the tsm1.Cache used.
 type CacheStore struct {
-	buckets    []*bucket
 	mu         sync.RWMutex
-	hasherPool *sync.Pool
+	buckets    []*bucket
 	seed       uint32
+	hasherPool *sync.Pool
 }
 
 // fieldData stores field-related data. An instance of this type makes up a
@@ -256,10 +256,10 @@ func (b *bucket) unguardedPut(ck CompositeKey, e *entry) bool {
 	return ok
 }
 
-// GetOrPut fetches a value, or replaces it with the provided default, while
-// holding the minimal number of locks. Note that `makerFunc` may be called
-// and its result discarded.
-func (cs *CacheStore) GetOrPut(ck CompositeKey, makerFunc func() *entry) *entry {
+// GetOrPutFn fetches a value, or replaces it with the result of calling the
+// provided function, while holding the minimal number of locks.
+// Note that `makerFunc` may be called yet its result discarded.
+func (cs *CacheStore) GetOrPutFn(ck CompositeKey, makerFunc func() *entry) *entry {
 	b := cs.bucketFor(ck)
 
 	// (this func gets inlined)

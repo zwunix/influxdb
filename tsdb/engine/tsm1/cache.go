@@ -67,38 +67,6 @@ func (e *entry) add(values []Value) {
 	e.mu.Unlock()
 }
 
-func (e *entry) addUnguarded(values []Value) {
-	// See if the new values are sorted or contain duplicate timestamps
-	var (
-		prevTime int64
-		needSort bool
-	)
-
-	for _, v := range values {
-		if v.UnixNano() <= prevTime {
-			needSort = true
-			break
-		}
-		prevTime = v.UnixNano()
-	}
-
-	// if there are existing values make sure they're all less than the first of
-	// the new values being added
-	if needSort {
-		e.needSort = needSort
-	}
-	if len(e.values) == 0 {
-		e.values = values
-	} else {
-		l := len(e.values)
-		lastValTime := e.values[l-1].UnixNano()
-		if lastValTime >= values[0].UnixNano() {
-			e.needSort = true
-		}
-		e.values = append(e.values, values...)
-	}
-}
-
 // deduplicate sorts and orders the entry's values. If values are already deduped and
 // and sorted, the function does no work and simply returns.
 func (e *entry) deduplicate() {
@@ -261,8 +229,8 @@ func (c *Cache) WriteMulti(values map[string][]Value) error {
 		ck := StringToCompositeKey(k)
 		c.entry(ck).add(v)
 	}
+
 	c.mu.Lock()
-	//atomic.AddUint64(&c.size, uint64(totalSz))
 	c.size += uint64(totalSz)
 	c.mu.Unlock()
 
@@ -297,14 +265,14 @@ func (c *Cache) Snapshot() (*Cache, error) {
 		// TODO(rw): is this RLock necessary? The Cache is RWLock'ed.
 		cacheEntry.mu.RLock()
 
-		if snapshotEntry, ok := c.snapshot.store.UnguardedGetChecked(ck); ok {
+		if snapshotEntry, ok := c.snapshot.store.GetChecked(ck); ok {
 			snapshotEntry.add(cacheEntry.values)
 		} else {
-			c.snapshot.store.UnguardedPut(ck, cacheEntry)
+			c.snapshot.store.Put(ck, cacheEntry)
 		}
 		c.snapshotSize += uint64(Values(cacheEntry.values).Size())
 		if cacheEntry.needSort {
-			x, _ := c.snapshot.store.UnguardedGetChecked(ck)
+			x, _ := c.snapshot.store.GetChecked(ck)
 			x.needSort = true
 		}
 
@@ -621,7 +589,7 @@ func (c *Cache) write(ck CompositeKey, values []Value) {
 }
 
 func (c *Cache) entry(ck CompositeKey) *entry {
-	return c.store.GetOrPut(ck, newEntry)
+	return c.store.GetOrPutFn(ck, newEntry)
 }
 
 // CacheLoader processes a set of WAL segment files, and loads a cache with the data
