@@ -298,7 +298,7 @@ func (c *Cache) Snapshot() (*Cache, error) {
 		cacheEntry.mu.RLock()
 
 		if snapshotEntry, ok := c.snapshot.store.UnguardedGetChecked(ck); ok {
-			snapshotEntry.addUnguarded(cacheEntry.values)
+			snapshotEntry.add(cacheEntry.values)
 		} else {
 			c.snapshot.store.UnguardedPut(ck, cacheEntry)
 		}
@@ -373,7 +373,7 @@ func (c *Cache) MaxSize() uint64 {
 }
 
 type StringHeapItem struct {
-	key string
+	key    string
 	source chan StringHeapItem
 }
 type StringHeap []StringHeapItem
@@ -422,12 +422,12 @@ func (c *Cache) Keys() []string {
 			b := c.store.buckets[i]
 			ch := chans[i]
 			b.sortedStringKeys.Walk(func(key string, _ interface{}) bool {
-			  	x := StringHeapItem{
-			  		key: key,
-			  		source: ch,
-			  	}
-			  	ch <- x
-			  	return false
+				x := StringHeapItem{
+					key:    key,
+					source: ch,
+				}
+				ch <- x
+				return false
 			})
 			close(chans[i])
 		}(i)
@@ -436,7 +436,7 @@ func (c *Cache) Keys() []string {
 
 	h := make(StringHeap, 0, len(c.store.buckets))
 	for i := range chans {
-		x, ok := <- chans[i]
+		x, ok := <-chans[i]
 		if !ok {
 			continue
 		}
@@ -447,7 +447,7 @@ func (c *Cache) Keys() []string {
 		top := h.Pop().(StringHeapItem)
 		a[i] = top.key
 
-		next, ok := <- top.source
+		next, ok := <-top.source
 		if !ok {
 			// this channel is empty
 			continue

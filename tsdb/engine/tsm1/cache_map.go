@@ -2,8 +2,8 @@ package tsm1
 
 import (
 	"fmt"
-	"math/rand"
 	"hash"
+	"math/rand"
 	//"hash/fnv"
 	"os"
 	"strconv"
@@ -11,8 +11,8 @@ import (
 	"sync"
 	"unsafe"
 
+	radix "github.com/armon/go-radix"
 	"github.com/pierrec/xxHash/xxHash32"
-	radixTree "github.com/armon/go-radix"
 )
 
 type (
@@ -64,6 +64,7 @@ func (ck CompositeKey) StringKey() string {
 }
 
 var LOCKFREE_SHARDS uint32 = 16
+
 func init() {
 	if s := os.Getenv("LOCKFREE_SHARDS"); s != "" {
 		n, err := strconv.Atoi(s)
@@ -76,10 +77,10 @@ func init() {
 }
 
 type bucket struct {
-	count int64
-	mu sync.RWMutex
-	data map[seriesKey]*fieldData
-	sortedStringKeys *radixTree.Tree
+	count            int64
+	mu               sync.RWMutex
+	data             map[seriesKey]*fieldData
+	sortedStringKeys *radix.Tree
 }
 
 // CacheStore is a sharded map used for storing series data in a *tsm1.Cache.
@@ -88,10 +89,10 @@ type bucket struct {
 // map instance. Using this type is a speed improvement over the previous
 // map[string]*entry type that the tsm1.Cache used.
 type CacheStore struct {
-	buckets   []*bucket
-	mu sync.RWMutex
-	hasherPool         *sync.Pool
-	seed uint32
+	buckets    []*bucket
+	mu         sync.RWMutex
+	hasherPool *sync.Pool
+	seed       uint32
 }
 
 // fieldData stores field-related data. An instance of this type makes up a
@@ -114,16 +115,16 @@ func NewCacheStore() *CacheStore {
 	bb := make([]*bucket, LOCKFREE_SHARDS)
 	for i := range bb {
 		b := &bucket{
-			data: map[seriesKey]*fieldData{},
-			sortedStringKeys:   radixTree.New(),
+			data:             map[seriesKey]*fieldData{},
+			sortedStringKeys: radix.New(),
 		}
 		bb[i] = b
 	}
 	return &CacheStore{
-		mu:                 sync.RWMutex{},
-		buckets:            bb,
-		hasherPool:         hasherPool,
-		seed: seed,
+		mu:         sync.RWMutex{},
+		buckets:    bb,
+		hasherPool: hasherPool,
+		seed:       seed,
 	}
 }
 
@@ -165,7 +166,6 @@ func (cs *CacheStore) Len() int64 {
 	}
 	return n
 }
-
 
 // Get fetches the value associated with the CacheStore, if any. It is
 // equivalent to the one-variable form of a Go map access.
