@@ -2,16 +2,17 @@ package tsm1
 
 import (
 	"fmt"
+	"math/rand"
 	"hash"
 	//"hash/fnv"
-	"github.com/pierrec/xxHash/xxHash32"
-	//"github.com/google/btree"
-	radixTree "github.com/armon/go-radix"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"unsafe"
+
+	"github.com/pierrec/xxHash/xxHash32"
+	radixTree "github.com/armon/go-radix"
 )
 
 type (
@@ -63,12 +64,6 @@ func (ck CompositeKey) StringKey() string {
 }
 
 var LOCKFREE_SHARDS uint32 = 16
-var globalHasherPool = &sync.Pool{
-	New: func() interface{} {
-		return xxHash32.New(1234)
-	},
-}
-
 func init() {
 	if s := os.Getenv("LOCKFREE_SHARDS"); s != "" {
 		n, err := strconv.Atoi(s)
@@ -96,6 +91,7 @@ type CacheStore struct {
 	buckets   []*bucket
 	mu sync.RWMutex
 	hasherPool         *sync.Pool
+	seed uint32
 }
 
 // fieldData stores field-related data. An instance of this type makes up a
@@ -107,8 +103,14 @@ type fieldData struct {
 }
 
 // NewCacheStore creates a new CacheStore.
-func NewCacheStore() CacheStore {
-	hasherPool := globalHasherPool
+func NewCacheStore() *CacheStore {
+	seed := uint32(rand.Int31())
+	hasherPool := &sync.Pool{
+		New: func() interface{} {
+			return xxHash32.New(seed)
+		},
+	}
+
 	bb := make([]*bucket, LOCKFREE_SHARDS)
 	for i := range bb {
 		b := &bucket{
@@ -117,22 +119,26 @@ func NewCacheStore() CacheStore {
 		}
 		bb[i] = b
 	}
-	return CacheStore{
+	return &CacheStore{
 		mu:                 sync.RWMutex{},
 		buckets:            bb,
 		hasherPool:         hasherPool,
+		seed: seed,
 	}
 }
 
-func (cs CacheStore) getHasher() hash.Hash32 {
+func (cs *CacheStore) getHasher() hash.Hash32 {
 	return cs.hasherPool.Get().(hash.Hash32)
 }
-func (cs CacheStore) putHasher(h hash.Hash32) {
+func (cs *CacheStore) putHasher(h hash.Hash32) {
 	h.Reset()
 	cs.hasherPool.Put(h)
 }
-func (cs CacheStore) bucketId(ck CompositeKey) uint32 {
+func (cs *CacheStore) bucketId(ck CompositeKey) uint32 {
 	hasher := cs.getHasher()
+
+	// this usage of unsafe is necessary to prevent a dumb heap allocation
+	// when writing data to be hashed: hasher.Write([]byte(ck.SeriesKey))
 	xx := *(*[]byte)(unsafe.Pointer(&ck.SeriesKey))
 	hasher.Write(xx)
 	n := hasher.Sum32()
@@ -143,12 +149,12 @@ func (cs CacheStore) bucketId(ck CompositeKey) uint32 {
 	return m
 }
 
-func (cs CacheStore) bucketFor(ck CompositeKey) *bucket {
+func (cs *CacheStore) bucketFor(ck CompositeKey) *bucket {
 	return cs.buckets[cs.bucketId(ck)]
 }
 
 // Len computes the total number of elements.
-func (cs CacheStore) Len() int64 {
+func (cs *CacheStore) Len() int64 {
 	var n int64
 	for _, b := range cs.buckets {
 		b.mu.RLock()
@@ -163,7 +169,7 @@ func (cs CacheStore) Len() int64 {
 
 // Get fetches the value associated with the CacheStore, if any. It is
 // equivalent to the one-variable form of a Go map access.
-func (cs CacheStore) Get(ck CompositeKey) *entry {
+func (cs *CacheStore) Get(ck CompositeKey) *entry {
 	e, ok := cs.GetChecked(ck)
 	if ok {
 		return e
@@ -173,7 +179,7 @@ func (cs CacheStore) Get(ck CompositeKey) *entry {
 
 // Get fetches the value associated with the CacheStore. It is equivalent to
 // the two-variable form of a Go map access.
-func (cs CacheStore) GetChecked(ck CompositeKey) (*entry, bool) {
+func (cs *CacheStore) GetChecked(ck CompositeKey) (*entry, bool) {
 	//cs.mu.RLock()
 	b := cs.bucketFor(ck)
 	b.mu.RLock()
@@ -194,7 +200,7 @@ func (cs CacheStore) GetChecked(ck CompositeKey) (*entry, bool) {
 	//cs.mu.RUnlock()
 	return e, true
 }
-func (cs CacheStore) UnguardedGetChecked(ck CompositeKey) (*entry, bool) {
+func (cs *CacheStore) UnguardedGetChecked(ck CompositeKey) (*entry, bool) {
 	b := cs.bucketFor(ck)
 
 	sub, ok := b.data[ck.SeriesKey]
@@ -209,19 +215,19 @@ func (cs CacheStore) UnguardedGetChecked(ck CompositeKey) (*entry, bool) {
 }
 
 // Put puts the given value into the CacheStore.
-func (cs CacheStore) Put(ck CompositeKey, e *entry) {
+func (cs *CacheStore) Put(ck CompositeKey, e *entry) {
 	b := cs.bucketFor(ck)
 	b.mu.Lock()
 	b.unguardedPut(ck, e)
 	b.mu.Unlock()
 }
 
-func (cs CacheStore) UnguardedPut(ck CompositeKey, e *entry) {
+func (cs *CacheStore) UnguardedPut(ck CompositeKey, e *entry) {
 	b := cs.bucketFor(ck)
 	b.unguardedPut(ck, e)
 }
 
-func (b bucket) unguardedPut(ck CompositeKey, e *entry) bool {
+func (b *bucket) unguardedPut(ck CompositeKey, e *entry) bool {
 	sub, ok := b.data[ck.SeriesKey]
 	if sub == nil || !ok {
 		sub = &fieldData{
@@ -239,8 +245,10 @@ func (b bucket) unguardedPut(ck CompositeKey, e *entry) bool {
 // GetOrPut fetches a value, or replaces it with the provided default, while
 // holding the minimal number of locks. Note that `makerFunc` may be called
 // and its result discarded.
-func (cs CacheStore) GetOrPut(ck CompositeKey, makerFunc func() *entry) *entry {
+func (cs *CacheStore) GetOrPut(ck CompositeKey, makerFunc func() *entry) *entry {
 	b := cs.bucketFor(ck)
+
+	// (this func gets inlined)
 	hasItem := func() (*entry, bool) {
 		sub, ok := b.data[ck.SeriesKey]
 		if sub == nil || !ok {
@@ -278,7 +286,7 @@ func (cs CacheStore) GetOrPut(ck CompositeKey, makerFunc func() *entry) *entry {
 }
 
 // Delete deletes the given key from the CacheStore, if applicable.
-func (cs CacheStore) Delete(ck CompositeKey) {
+func (cs *CacheStore) Delete(ck CompositeKey) {
 	b := cs.bucketFor(ck)
 	b.mu.Lock()
 
@@ -300,7 +308,7 @@ func (cs CacheStore) Delete(ck CompositeKey) {
 // callback function that acts upon each (key, value) pair, and aborts if that
 // callback returns an error. It is equivalent to the two-variable range
 // statement with the normal Go map.
-func (cs CacheStore) Iter(f func(CompositeKey, *entry) error) error {
+func (cs *CacheStore) Iter(f func(CompositeKey, *entry) error) error {
 	ck := &CompositeKey{}
 	for _, bucket := range cs.buckets {
 		bucket.mu.RLock()

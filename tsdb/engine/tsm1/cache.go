@@ -155,7 +155,7 @@ const (
 type Cache struct {
 	commit  sync.Mutex
 	mu      sync.RWMutex
-	store   CacheStore
+	store   *CacheStore
 	size    uint64
 	maxSize uint64
 
@@ -586,7 +586,7 @@ func (c *Cache) merged(ck CompositeKey) Values {
 
 // Store returns the underlying cache store. This is not goroutine safe!
 // Protect access by using the Lock and Unlock functions on Cache.
-func (c *Cache) Store() CacheStore {
+func (c *Cache) Store() *CacheStore {
 	return c.store
 }
 
