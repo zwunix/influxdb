@@ -99,6 +99,7 @@ With this release the systemd configuration files for InfluxDB will use the syst
 - [#6796](https://github.com/influxdata/influxdb/issues/6796): Out of Memory Error when Dropping Measurement
 - [#6946](https://github.com/influxdata/influxdb/issues/6946): Duplicate data for the same timestamp
 - [#7043](https://github.com/influxdata/influxdb/pull/7043): Remove limiter from walkShards
+- [#7032](https://github.com/influxdata/influxdb/pull/7032): Copy tags in influx_stress to avoid a concurrent write panic on a map.
 
 ## v0.13.0 [2016-05-12]
 

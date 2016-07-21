@@ -678,9 +678,12 @@ func (o *outputConfig) HTTPHandler(method string) func(r <-chan response, rt *Ti
 			Precision:       "ns",
 		})
 		for p := range r {
-			o.mu.Lock()
-			tags := o.tags
-			o.mu.Unlock()
+			o.mu.RLock()
+			tags := make(map[string]string, len(o.tags))
+			for k, v := range o.tags {
+				tags[k] = v
+			}
+			o.mu.RUnlock()
 			tags["method"] = method
 			fields := map[string]interface{}{
 				"response_time": float64(p.Timer.Elapsed()),
