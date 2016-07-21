@@ -85,6 +85,13 @@ func (m *Main) Run(args ...string) error {
 			return fmt.Errorf("run: %s", err)
 		}
 
+		// Ignore SIGPIPE as systemd will end up sending it whenever
+		// journald gets restarted. We only do this inside of the daemon
+		// so other commands aren't affected by this.
+		// Ideally, systemd wouldn't send us a signal we aren't supposed to
+		// handle. This is the best of a bunch of wrong solutions.
+		ignoreSigPipe()
+
 		signalCh := make(chan os.Signal, 1)
 		signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
 		m.Logger.Println("Listening for signals")
