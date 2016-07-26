@@ -1457,12 +1457,12 @@ type Fields map[string]interface{}
 func parseNumber(val []byte) (interface{}, error) {
 	if val[len(val)-1] == 'i' {
 		val = val[:len(val)-1]
-		return strconv.ParseInt(string(val), 10, 64)
+		return strconv.ParseInt(byteSliceToString(val), 10, 64)
 	}
 	for i := 0; i < len(val); i++ {
 		// If there is a decimal or an N (NaN), I (Inf), parse as float
 		if val[i] == '.' || val[i] == 'N' || val[i] == 'n' || val[i] == 'I' || val[i] == 'i' || val[i] == 'e' {
-			return strconv.ParseFloat(string(val), 64)
+			return strconv.ParseFloat(byteSliceToString(val), 64)
 		}
 		if val[i] < '0' && val[i] > '9' {
 			return string(val), nil

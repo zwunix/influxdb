@@ -86,36 +86,38 @@ func init() {
 			}
 		}
 	}
-	go func() {
-		programStart := time.Now.UnixNano()
-		for {
-			<-time.After(1 * time.Second)
-			start := (time.Now.UnixNano() - programStart) / 1e6
-			for i := range globalInternedBuckets {
-				dbg0 := []int64{}
-				dbg1 := []int64{}
-				for j := uint64(0); j < internShards; j++ {
-					b := globalInternedBuckets[i][j]
-					b.mu.RLock()
-					x := b.averageLen
-					y := b.count
-					b.mu.RUnlock()
-					dbg0 = append(dbg0, int64(x))
-					dbg1 = append(dbg1, y)
-				}
+	if internPrint {
+		go func() {
+			programStart := time.Now().UnixNano()
+			for {
+				<-time.After(1 * time.Second)
+				start := (time.Now().UnixNano() - programStart) / 1e6
+				for i := range globalInternedBuckets {
+					dbg0 := []int64{}
+					dbg1 := []int64{}
+					for j := uint64(0); j < internShards; j++ {
+						b := globalInternedBuckets[i][j]
+						b.mu.RLock()
+						x := b.averageLen
+						y := b.count
+						b.mu.RUnlock()
+						dbg0 = append(dbg0, int64(x))
+						dbg1 = append(dbg1, y)
+					}
 
-				fmt.Printf("%6dms: %d avg: %v\n", start, i, dbg0)
-				fmt.Printf("%6dms: %d cnt: %v\n", start, i, dbg1)
+					fmt.Printf("%6dms: %d avg: %v\n", start, i, dbg0)
+					fmt.Printf("%6dms: %d cnt: %v\n", start, i, dbg1)
+				}
 			}
-		}
-	}()
+		}()
+	}
 }
 
 func byteSliceToString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 func stringToByteSlice(s string) []byte {
-	return *(*[]byte)(unsafe.Pointer(&b))
+	return *(*[]byte)(unsafe.Pointer(&s))
 }
 
 func bucketPos(l int) int {
