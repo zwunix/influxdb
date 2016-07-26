@@ -24,6 +24,7 @@ const (
 
 var (
 	internShards          uint64 = 32
+	internPrint           bool = false
 	globalInternedBuckets [][]*internBucket
 	//internMB              int = 1024
 )
@@ -70,7 +71,11 @@ func init() {
 		}
 		internShards = uint64(n)
 	}
-	println("INTERN_SHARDS is", internShards)
+	println("INTERN_SHARDS is", internPrint)
+	if s := os.Getenv("INTERN_PRINT"); s != "" {
+		internPrint = true
+	}
+	println("INTERN_PRINT is", internPrint)
 
 	globalInternedBuckets = make([][]*internBucket, 5)
 	for i := 0; i < 5; i++ {
