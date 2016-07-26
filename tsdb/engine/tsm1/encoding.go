@@ -37,27 +37,6 @@ type Value interface {
 	internalOnly()
 }
 
-//var newIntegerValueChan = make(chan *IntegerValue, 1e6)
-//var newFloatValueChan = make(chan *FloatValue, 1e6)
-//func init() {
-//	go func() {
-//		for {
-//			vvs := make([]IntegerValue, 1e6)
-//			for i := range vvs {
-//				newIntegerValueChan <- &vvs[i]
-//			}
-//		}
-//	}()
-//	go func() {
-//		for {
-//			vvs := make([]FloatValue, 1e6)
-//			for i := range vvs {
-//				newFloatValueChan <- &vvs[i]
-//			}
-//		}
-//	}()
-//}
-
 type integerValueBatch struct {
 	mu *sync.Mutex
 	backing []IntegerValue
