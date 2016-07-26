@@ -148,9 +148,9 @@ func ParseKey(buf string) (string, Tags, error) {
 	if state == tagKeyState {
 		tags = parseTags([]byte(buf))
 		// scanMeasurement returns the location of the comma if there are tags, strip that off
-		return string(buf[:i-1]), tags, nil
+		return GetInternedStringFromBytes([]byte(buf[:i-1])), tags, nil
 	}
-	return string(buf[:i]), tags, nil
+	return GetInternedStringFromBytes([]byte(buf[:i])), tags, nil
 }
 
 // ParsePointsWithPrecision is similar to ParsePoints, but allows the
@@ -249,7 +249,7 @@ func parsePoint(buf []byte, defaultTime time.Time, precision string) (Point, err
 		pt.time = defaultTime
 		pt.SetPrecision(precision)
 	} else {
-		ts, err := strconv.ParseInt(string(ts), 10, 64)
+		ts, err := strconv.ParseInt(byteSliceToString(ts), 10, 64)
 		if err != nil {
 			return nil, err
 		}
@@ -786,14 +786,14 @@ func scanNumber(buf []byte, i int) (int, error) {
 		// Parse the int to check bounds the number of digits could be larger than the max range
 		// We subtract 1 from the index to remove the `i` from our tests
 		if len(buf[start:i-1]) >= maxInt64Digits || len(buf[start:i-1]) >= minInt64Digits {
-			if _, err := strconv.ParseInt(string(buf[start:i-1]), 10, 64); err != nil {
+			if _, err := strconv.ParseInt(byteSliceToString(buf[start:i-1]), 10, 64); err != nil {
 				return i, fmt.Errorf("unable to parse integer %s: %s", buf[start:i-1], err)
 			}
 		}
 	} else {
 		// Parse the float to check bounds if it's scientific or the number of digits could be larger than the max range
 		if scientific || len(buf[start:i]) >= maxFloat64Digits || len(buf[start:i]) >= minFloat64Digits {
-			if _, err := strconv.ParseFloat(string(buf[start:i]), 10); err != nil {
+			if _, err := strconv.ParseFloat(byteSliceToString(buf[start:i]), 10); err != nil {
 				return i, fmt.Errorf("invalid float")
 			}
 		}

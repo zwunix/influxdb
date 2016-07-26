@@ -449,7 +449,7 @@ func (s *Shard) validateSeriesAndFields(points []models.Point) ([]*FieldCreate, 
 	// get the shard mutex for locally defined fields
 	for _, p := range points {
 		// see if the series should be added to the index
-		key := string(p.Key())
+		key := models.GetInternedStringFromBytes(p.Key())
 		ss := s.index.Series(key)
 		if ss == nil {
 			ss = NewSeries(key, p.Tags())

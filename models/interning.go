@@ -2,7 +2,7 @@
 package models
 
 import (
-	_ "fmt"
+	"fmt"
 	"os"
 	"strconv"
 	"sync"
@@ -10,7 +10,7 @@ import (
 	"unsafe"
 )
 
-import "github.com/allegro/bigcache"
+import "github.com/allegro/bigcache" // unused by real code
 
 const (
 	// taken from bigcache
@@ -33,7 +33,7 @@ type internBucket struct {
 	mu         sync.RWMutex
 	averageLen float64
 	count      int64
-	items      *bigcache.BigCache
+	items      map[string]string
 }
 
 // adapted from bigcache
@@ -82,38 +82,40 @@ func init() {
 		globalInternedBuckets[i] = make([]*internBucket, internShards)
 		for j := uint64(0); j < internShards; j++ {
 			globalInternedBuckets[i][j] = &internBucket{
-				items: newBigCache(),
+				items: make(map[string]string),
 			}
-			//globalInternedBuckets[i][j] = &internBucket{
-			//	items: make(map[string]string),
-			//}
 		}
 	}
-	//go func() {
-	//	for {
-	//		<-time.After(1 * time.Second)
-	//		for i := range globalInternedBuckets {
-	//			dbg0 := []int64{}
-	//			dbg1 := []int64{}
-	//			for j := uint64(0); j < internShards; j++ {
-	//				b := globalInternedBuckets[i][j]
-	//				b.mu.RLock()
-	//				x := b.averageLen
-	//				y := b.count
-	//				b.mu.RUnlock()
-	//				dbg0 = append(dbg0, int64(x))
-	//				dbg1 = append(dbg1, y)
-	//			}
+	go func() {
+		programStart := time.Now.UnixNano()
+		for {
+			<-time.After(1 * time.Second)
+			start := (time.Now.UnixNano() - programStart) / 1e6
+			for i := range globalInternedBuckets {
+				dbg0 := []int64{}
+				dbg1 := []int64{}
+				for j := uint64(0); j < internShards; j++ {
+					b := globalInternedBuckets[i][j]
+					b.mu.RLock()
+					x := b.averageLen
+					y := b.count
+					b.mu.RUnlock()
+					dbg0 = append(dbg0, int64(x))
+					dbg1 = append(dbg1, y)
+				}
 
-	//			fmt.Printf("%d avg: %v\n", i, dbg0)
-	//			fmt.Printf("%d cnt: %v\n", i, dbg1)
-	//		}
-	//	}
-	//}()
+				fmt.Printf("%6dms: %d avg: %v\n", start, i, dbg0)
+				fmt.Printf("%6dms: %d cnt: %v\n", start, i, dbg1)
+			}
+		}
+	}()
 }
 
 func byteSliceToString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
+}
+func stringToByteSlice(s string) []byte {
+	return *(*[]byte)(unsafe.Pointer(&b))
 }
 
 func bucketPos(l int) int {
@@ -134,52 +136,51 @@ func GetInternedStringFromBytes(x []byte) string {
 	h := int(FNV64a_Sum64(x) % uint64(internShards))
 	b := globalInternedBuckets[bucketPos(len(x))][h]
 
-	//b.mu.RLock()
-	//s, ok := b.items[string(x)]
-	//b.mu.RUnlock()
-
-	//if ok {
-	//	return s
-	//}
-
-	//b.mu.Lock()
-	//s, ok = b.items[string(x)]
-	//if !ok {
-	//	// heap alloc
-	//	s = string(x)
-	//	b.items[s] = s
-
-	//	newAvg := (b.averageLen*float64(b.count) + float64(len(s))) / (float64(b.count) + 1)
-
-	//	b.averageLen = newAvg
-	//	b.count++
-	//}
-	//b.mu.Unlock()
-	//return s
-
-	sKey := byteSliceToString(x)
-	bVal, err := b.items.Get(sKey)
-	ok := err == nil // (*BigCache).Get only has one kind of error
+	b.mu.RLock()
+	s, ok := b.items[string(x)]
+	b.mu.RUnlock()
 
 	if ok {
-		return byteSliceToString(bVal)
+		return s
 	}
 
-	// slow path: need to copy into the cache
+	b.mu.Lock()
+	s, ok = b.items[string(x)]
+	if !ok {
+		// heap alloc
+		s = string(x)
+		b.items[s] = s
 
-	err = b.items.Set(sKey, x)
-	if err != nil {
-		// (*BigCache).Set returns an error if it's full
-		return string(x) // failsafe alloc
-	}
+		newAvg := (b.averageLen*float64(b.count) + float64(len(s))) / (float64(b.count) + 1)
 
-	bVal, err = b.items.Get(sKey)
-	if err != nil {
-		panic("unepxected 2nd get error")
+		b.averageLen = newAvg
+		b.count++
 	}
-	return byteSliceToString(bVal)
+	b.mu.Unlock()
+	return s
+
+	//sKey := byteSliceToString(x)
+	//bVal, err := globalInternedStrings.Get(sKey)
+	//ok := err == nil // (*BigCache).Get only has one kind of error
+
+	//if ok {
+	//	return byteSliceToString(bVal)
+	//}
+
+	//// slow path: need to copy into the cache
+
+	//err = globalInternedStrings.Set(sKey, x)
+	//if err != nil {
+	//	// (*BigCache).Set returns an error if it's full
+	//	return string(x) // failsafe alloc
+	//}
+
+	//bVal, err = globalInternedStrings.Get(sKey)
+	//if err != nil {
+	//	panic("unepxected 2nd get error")
+	//}
+	//return byteSliceToString(bVal)
 }
-
 func newBigCache() *bigcache.BigCache {
 	config := bigcache.Config{
 		// number of shards (must be a power of 2)
