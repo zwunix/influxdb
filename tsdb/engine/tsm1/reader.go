@@ -10,6 +10,8 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+
+	"github.com/influxdata/influxdb/models"
 )
 
 var ErrFileInUse = fmt.Errorf("file still in use")
@@ -654,7 +656,7 @@ func (d *indirectIndex) Key(idx int) (string, []IndexEntry) {
 	if _, err := readEntries(d.b[int(d.offsets[idx])+n:], &entries); err != nil {
 		return "", nil
 	}
-	return string(key), entries.entries
+	return models.GetInternedStringFromBytes(key), entries.entries
 }
 
 func (d *indirectIndex) KeyAt(idx int) (string, byte) {
@@ -665,7 +667,7 @@ func (d *indirectIndex) KeyAt(idx int) (string, byte) {
 		return "", 0
 	}
 	n, key, _ := readKey(d.b[d.offsets[idx]:])
-	return string(key), d.b[d.offsets[idx]+int32(n)]
+	return models.GetInternedStringFromBytes(key), d.b[d.offsets[idx]+int32(n)]
 }
 
 func (d *indirectIndex) KeyCount() int {
@@ -886,14 +888,14 @@ func (d *indirectIndex) UnmarshalBinary(b []byte) error {
 	if err != nil {
 		return err
 	}
-	d.minKey = string(key)
+	d.minKey = models.GetInternedStringFromBytes(key)
 
 	lastOfs := d.offsets[len(d.offsets)-1]
 	_, key, err = readKey(b[lastOfs:])
 	if err != nil {
 		return err
 	}
-	d.maxKey = string(key)
+	d.maxKey = models.GetInternedStringFromBytes(key)
 
 	d.minTime = minTime
 	d.maxTime = maxTime

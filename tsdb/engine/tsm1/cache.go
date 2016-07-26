@@ -329,9 +329,11 @@ func (c *Cache) Keys() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	var a []string
+	a := make([]string, len(c.store))
+	i := 0
 	for k, _ := range c.store {
-		a = append(a, k)
+		a[i] = k
+		i++
 	}
 	sort.Strings(a)
 	return a

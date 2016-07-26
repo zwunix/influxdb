@@ -64,7 +64,7 @@ func init() {
 		// time after which entry can be evicted
 		LifeWindow: 10 * time.Minute,
 		// rps * lifeWindow, used only in initial memory allocation
-		MaxEntriesInWindow: 1000 * 10 * 60,
+		MaxEntriesInWindow: 1e7,
 		// max entry size in bytes, used only in initial memory allocation
 		MaxEntrySize: 1024,
 		// prints information about additional memory allocation
@@ -90,7 +90,7 @@ func byteSliceToString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 func GetInternedStringFromBytes(x []byte) string {
-	// TODO(rw): review this
+	// TODO(rw): assume this has an unsafe bug!
 
 	sKey := byteSliceToString(x)
 	bVal, err := globalInternedStrings.Get(sKey)
@@ -100,17 +100,19 @@ func GetInternedStringFromBytes(x []byte) string {
 		return byteSliceToString(bVal)
 	}
 
-	// slow path: need to allocate
-	buf := make([]byte, len(x))
-	copy(buf, x)
+	// slow path: need to copy into the cache
 
-	err = globalInternedStrings.Set(sKey, buf)
+	err = globalInternedStrings.Set(sKey, x)
 	if err != nil {
 		// (*BigCache).Set returns an error if it's full
 		return string(x) // failsafe alloc
 	}
 
-	return byteSliceToString(buf)
+	bVal, err = globalInternedStrings.Get(sKey)
+	if err != nil {
+		panic("unepxected 2nd get error")
+	}
+	return byteSliceToString(bVal)
 }
 
 const (

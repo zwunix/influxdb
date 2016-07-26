@@ -625,7 +625,7 @@ func (w *WriteWALEntry) UnmarshalBinary(b []byte) error {
 			return ErrWALCorrupt
 		}
 
-		k := string(b[i : i+length])
+		k := models.GetInternedStringFromBytes(b[i : i+length])
 		i += length
 
 		if i+4 > len(b) {
