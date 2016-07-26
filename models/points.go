@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/influxdata/influxdb/pkg/escape"
@@ -32,6 +33,53 @@ var (
 	ErrInvalidPoint         = errors.New("point is invalid")
 	ErrMaxKeyLengthExceeded = errors.New("max key length exceeded")
 )
+
+var globalInternedStrings = map[string]string{}
+var globalInternedStringsLock = &sync.RWMutex{}
+
+func GetInternedStringFromString(x string) string {
+	l := globalInternedStringsLock
+
+	l.RLock()
+	s, ok := globalInternedStrings[x]
+	l.RUnlock()
+
+	if ok {
+		return s
+	}
+
+	l.Lock()
+	s, ok = globalInternedStrings[x]
+	if !ok {
+		s = x
+		globalInternedStrings[s] = s
+	}
+	l.Unlock()
+
+	return s
+}
+
+func GetInternedStringFromBytes(x []byte) string {
+	l := globalInternedStringsLock
+
+	l.RLock()
+	s, ok := globalInternedStrings[string(x)]
+	l.RUnlock()
+
+	if ok {
+		return s
+	}
+
+	l.Lock()
+	s, ok = globalInternedStrings[string(x)]
+	if !ok {
+		s = string(x)
+		globalInternedStrings[s] = s
+	}
+	l.Unlock()
+
+	return s
+}
 
 const (
 	MaxKeyLength = 65535
@@ -1486,6 +1534,7 @@ func newFieldsFromBinary(buf []byte) Fields {
 
 		i, valueBuf = scanFieldValue(buf, i+1)
 		if len(name) > 0 {
+			//nameInterned := GetInternedStringFromBytes(name)
 			if len(valueBuf) == 0 {
 				fields[string(name)] = nil
 				continue
