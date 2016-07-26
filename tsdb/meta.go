@@ -763,7 +763,7 @@ func (m *Measurement) TagSets(dimensions []string, condition influxql.Expr) ([]*
 
 		// Convert the TagSet to a string, so it can be added to a map allowing TagSets to be handled
 		// as a set.
-		tagsAsKey := string(MarshalTags(tags))
+		tagsAsKey := models.GetInternedStringFromBytes(MarshalTags(tags))
 		tagSet, ok := tagSets[tagsAsKey]
 		if !ok {
 			// This TagSet is new, create a new entry for it.

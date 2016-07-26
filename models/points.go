@@ -34,7 +34,7 @@ var (
 	ErrMaxKeyLengthExceeded = errors.New("max key length exceeded")
 )
 
-var globalInternedStrings = map[string]string{}
+var globalInternedStrings = make(map[string]string, 1e7)
 var globalInternedStringsLock = &sync.RWMutex{}
 
 func GetInternedStringFromString(x string) string {

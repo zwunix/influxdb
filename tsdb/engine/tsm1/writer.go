@@ -73,6 +73,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/influxdata/influxdb/models"
 )
 
 const (
@@ -401,7 +403,8 @@ func (d *directIndex) UnmarshalBinary(b []byte) error {
 		}
 
 		pos += n
-		d.addEntries(string(key), &entries)
+		skey := models.GetInternedStringFromBytes(key)
+		d.addEntries(skey, &entries)
 	}
 	return nil
 }
