@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	//"reflect"
 	"sync"
 	"time"
 	"unsafe"
@@ -36,7 +37,7 @@ var (
 	ErrInvalidPoint         = errors.New("point is invalid")
 	ErrMaxKeyLengthExceeded = errors.New("max key length exceeded")
 
-	globalInternedBuckets []*internBucket
+	globalInternedBuckets [][]*internBucket
 	//internMB              int = 1024
 	//internShards          int = 1024
 )
@@ -46,12 +47,43 @@ type internBucket struct {
 	items map[string]string
 }
 
-func init() {
-	globalInternedBuckets = make([]*internBucket, 5)
-	for i := 0; i < 5; i++ {
-		globalInternedBuckets[i] = &internBucket{
-			items: make(map[string]string, 1e6),
+const SHARDS = 16
 
+type FNV64a struct{}
+
+const (
+	// offset64 FNVa offset basis. See https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function#FNV-1a_hash
+	offset64 = 14695981039346656037
+	// prime64 FNVa prime value. See https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function#FNV-1a_hash
+	prime64 = 1099511628211
+)
+
+// Sum64 gets the string and returns its uint64 hash value.
+func FNV64a_Sum64(key []byte) uint64 {
+	var hash uint64 = offset64
+	i := 0
+	// this speedup may break FNV1a hash properties
+	for i + 8 <= len(key) {
+		hash ^= *(*uint64)(unsafe.Pointer(&key[0]))
+		hash *= prime64
+		i += 8
+	}
+	for ; i < len(key); i++ {
+		hash ^= uint64(key[i])
+		hash *= prime64
+	}
+
+	return hash
+}
+
+func init() {
+	globalInternedBuckets = make([][]*internBucket, 5)
+	for i := 0; i < 5; i++ {
+		globalInternedBuckets[i] = make([]*internBucket, SHARDS)
+		for j := 0; j < SHARDS; j++ {
+			globalInternedBuckets[i][j] = &internBucket{
+				items: make(map[string]string),
+			}
 		}
 	}
 	//if s := os.Getenv("INTERN_MB"); s != "" {
@@ -103,6 +135,7 @@ func byteSliceToString(b []byte) string {
 }
 
 func bucketPos(l int) int {
+	// heuristic
 	if l <= 8 {
 		return 0
 	} else if l <= 64 {
@@ -116,7 +149,9 @@ func bucketPos(l int) int {
 	}
 }
 func GetInternedStringFromBytes(x []byte) string {
-	b := globalInternedBuckets[bucketPos(len(x))]
+	h := int(FNV64a_Sum64(x) % SHARDS)
+	bb := globalInternedBuckets[bucketPos(len(x))]
+	b := bb[h]
 
 	b.mu.RLock()
 	s, ok := b.items[string(x)]
