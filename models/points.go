@@ -10,10 +10,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/influxdata/influxdb/pkg/escape"
+
+	"github.com/allegro/bigcache"
 )
 
 var (
@@ -32,53 +34,82 @@ var (
 	ErrInvalidNumber        = errors.New("invalid number")
 	ErrInvalidPoint         = errors.New("point is invalid")
 	ErrMaxKeyLengthExceeded = errors.New("max key length exceeded")
+
+	globalInternedStrings *bigcache.BigCache
+	internMB              int = 1024
+	internShards          int = 1024
 )
 
-var globalInternedStrings = make(map[string]string, 1e7)
-var globalInternedStringsLock = &sync.RWMutex{}
-
-func GetInternedStringFromString(x string) string {
-	l := globalInternedStringsLock
-
-	l.RLock()
-	s, ok := globalInternedStrings[x]
-	l.RUnlock()
-
-	if ok {
-		return s
+func init() {
+	if s := os.Getenv("INTERN_MB"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			panic(err.Error())
+		}
+		internMB = n
+	}
+	println("INTERN_MB is", internMB)
+	if s := os.Getenv("INTERN_SHARDS"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			panic(err.Error())
+		}
+		internShards = n
+	}
+	println("INTERN_SHARDS is", internShards)
+	config := bigcache.Config{
+		// number of shards (must be a power of 2)
+		Shards: internShards,
+		// time after which entry can be evicted
+		LifeWindow: 10 * time.Minute,
+		// rps * lifeWindow, used only in initial memory allocation
+		MaxEntriesInWindow: 1000 * 10 * 60,
+		// max entry size in bytes, used only in initial memory allocation
+		MaxEntrySize: 1024,
+		// prints information about additional memory allocation
+		Verbose: true,
+		// cache will not allocate more memory than this limit, value in MB
+		// if value is reached then the oldest entries can be overridden for the new ones
+		// 0 value means no size limit
+		HardMaxCacheSize: internMB,
+		// callback fired when the oldest entry is removed because of its
+		// expiration time or no space left for the new entry. Default value is nil which
+		// means no callback and it prevents from unwrapping the oldest entry.
+		OnRemove: nil,
 	}
 
-	l.Lock()
-	s, ok = globalInternedStrings[x]
-	if !ok {
-		s = x
-		globalInternedStrings[s] = s
+	bc, err := bigcache.NewBigCache(config)
+	if err != nil {
+		panic(err.Error())
 	}
-	l.Unlock()
-
-	return s
+	globalInternedStrings = bc
 }
 
+func byteSliceToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
 func GetInternedStringFromBytes(x []byte) string {
-	l := globalInternedStringsLock
+	// TODO(rw): review this
 
-	l.RLock()
-	s, ok := globalInternedStrings[string(x)]
-	l.RUnlock()
+	sKey := byteSliceToString(x)
+	bVal, err := globalInternedStrings.Get(sKey)
+	ok := err == nil // (*BigCache).Get only has one kind of error
 
 	if ok {
-		return s
+		return byteSliceToString(bVal)
 	}
 
-	l.Lock()
-	s, ok = globalInternedStrings[string(x)]
-	if !ok {
-		s = string(x)
-		globalInternedStrings[s] = s
-	}
-	l.Unlock()
+	// slow path: need to allocate
+	buf := make([]byte, len(x))
+	copy(buf, x)
 
-	return s
+	err = globalInternedStrings.Set(sKey, buf)
+	if err != nil {
+		// (*BigCache).Set returns an error if it's full
+		return string(x) // failsafe alloc
+	}
+
+	return byteSliceToString(buf)
 }
 
 const (
