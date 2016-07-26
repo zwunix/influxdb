@@ -7,16 +7,16 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/influxdata/influxdb/pkg/escape"
 
-	"github.com/allegro/bigcache"
+	//"github.com/allegro/bigcache"
 )
 
 var (
@@ -36,83 +36,131 @@ var (
 	ErrInvalidPoint         = errors.New("point is invalid")
 	ErrMaxKeyLengthExceeded = errors.New("max key length exceeded")
 
-	globalInternedStrings *bigcache.BigCache
-	internMB              int = 1024
-	internShards          int = 1024
+	globalInternedBuckets []*internBucket
+	//internMB              int = 1024
+	//internShards          int = 1024
 )
 
-func init() {
-	if s := os.Getenv("INTERN_MB"); s != "" {
-		n, err := strconv.Atoi(s)
-		if err != nil {
-			panic(err.Error())
-		}
-		internMB = n
-	}
-	println("INTERN_MB is", internMB)
-	if s := os.Getenv("INTERN_SHARDS"); s != "" {
-		n, err := strconv.Atoi(s)
-		if err != nil {
-			panic(err.Error())
-		}
-		internShards = n
-	}
-	println("INTERN_SHARDS is", internShards)
-	config := bigcache.Config{
-		// number of shards (must be a power of 2)
-		Shards: internShards,
-		// time after which entry can be evicted
-		LifeWindow: 10 * time.Minute,
-		// rps * lifeWindow, used only in initial memory allocation
-		MaxEntriesInWindow: 1e7,
-		// max entry size in bytes, used only in initial memory allocation
-		MaxEntrySize: 1024,
-		// prints information about additional memory allocation
-		Verbose: true,
-		// cache will not allocate more memory than this limit, value in MB
-		// if value is reached then the oldest entries can be overridden for the new ones
-		// 0 value means no size limit
-		HardMaxCacheSize: internMB,
-		// callback fired when the oldest entry is removed because of its
-		// expiration time or no space left for the new entry. Default value is nil which
-		// means no callback and it prevents from unwrapping the oldest entry.
-		OnRemove: nil,
-	}
+type internBucket struct {
+	mu sync.RWMutex
+	items map[string]string
+}
 
-	bc, err := bigcache.NewBigCache(config)
-	if err != nil {
-		panic(err.Error())
+func init() {
+	globalInternedBuckets = make([]*internBucket, 5)
+	for i := 0; i < 5; i++ {
+		globalInternedBuckets[i] = &internBucket{
+			items: make(map[string]string, 1e6),
+
+		}
 	}
-	globalInternedStrings = bc
+	//if s := os.Getenv("INTERN_MB"); s != "" {
+	//	n, err := strconv.Atoi(s)
+	//	if err != nil {
+	//		panic(err.Error())
+	//	}
+	//	internMB = n
+	//}
+	//println("INTERN_MB is", internMB)
+	//if s := os.Getenv("INTERN_SHARDS"); s != "" {
+	//	n, err := strconv.Atoi(s)
+	//	if err != nil {
+	//		panic(err.Error())
+	//	}
+	//	internShards = n
+	//}
+	//println("INTERN_SHARDS is", internShards)
+	//config := bigcache.Config{
+	//	// number of shards (must be a power of 2)
+	//	Shards: internShards,
+	//	// time after which entry can be evicted
+	//	LifeWindow: 10 * time.Minute,
+	//	// rps * lifeWindow, used only in initial memory allocation
+	//	MaxEntriesInWindow: 1e7,
+	//	// max entry size in bytes, used only in initial memory allocation
+	//	MaxEntrySize: 1024,
+	//	// prints information about additional memory allocation
+	//	Verbose: true,
+	//	// cache will not allocate more memory than this limit, value in MB
+	//	// if value is reached then the oldest entries can be overridden for the new ones
+	//	// 0 value means no size limit
+	//	HardMaxCacheSize: internMB,
+	//	// callback fired when the oldest entry is removed because of its
+	//	// expiration time or no space left for the new entry. Default value is nil which
+	//	// means no callback and it prevents from unwrapping the oldest entry.
+	//	OnRemove: nil,
+	//}
+
+	//bc, err := bigcache.NewBigCache(config)
+	//if err != nil {
+	//	panic(err.Error())
+	//}
+	//globalInternedStrings = bc
 }
 
 func byteSliceToString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
-func GetInternedStringFromBytes(x []byte) string {
-	// TODO(rw): assume this has an unsafe bug!
 
-	sKey := byteSliceToString(x)
-	bVal, err := globalInternedStrings.Get(sKey)
-	ok := err == nil // (*BigCache).Get only has one kind of error
+func bucketPos(l int) int {
+	if l <= 8 {
+		return 0
+	} else if l <= 64 {
+		return 1
+	} else if l <= 1024 {
+		return 2
+	} else if l <= 4096 {
+		return 3
+	} else {
+		return 4
+	}
+}
+func GetInternedStringFromBytes(x []byte) string {
+	b := globalInternedBuckets[bucketPos(len(x))]
+
+	b.mu.RLock()
+	s, ok := b.items[string(x)]
+	b.mu.RUnlock()
 
 	if ok {
-		return byteSliceToString(bVal)
+		return s
 	}
 
-	// slow path: need to copy into the cache
-
-	err = globalInternedStrings.Set(sKey, x)
-	if err != nil {
-		// (*BigCache).Set returns an error if it's full
-		return string(x) // failsafe alloc
+	b.mu.Lock()
+	s, ok = b.items[string(x)]
+	if !ok {
+		// heap alloc
+		s = string(x)
+		b.items[s] = s
 	}
+	b.mu.Unlock()
+	return s
 
-	bVal, err = globalInternedStrings.Get(sKey)
-	if err != nil {
-		panic("unepxected 2nd get error")
-	}
-	return byteSliceToString(bVal)
+
+
+	//// TODO(rw): assume this has an unsafe bug!
+
+	//sKey := byteSliceToString(x)
+	//bVal, err := globalInternedStrings.Get(sKey)
+	//ok := err == nil // (*BigCache).Get only has one kind of error
+
+	//if ok {
+	//	return byteSliceToString(bVal)
+	//}
+
+	//// slow path: need to copy into the cache
+
+	//err = globalInternedStrings.Set(sKey, x)
+	//if err != nil {
+	//	// (*BigCache).Set returns an error if it's full
+	//	return string(x) // failsafe alloc
+	//}
+
+	//bVal, err = globalInternedStrings.Get(sKey)
+	//if err != nil {
+	//	panic("unepxected 2nd get error")
+	//}
+	//return byteSliceToString(bVal)
 }
 
 const (
