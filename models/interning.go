@@ -2,9 +2,11 @@
 package models
 
 import (
+	"fmt"
 	"os"
-	"sync"
 	"strconv"
+	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -27,9 +29,19 @@ var (
 )
 
 type internBucket struct {
-	mu    sync.RWMutex
-	items map[string]string
+	mu         sync.RWMutex
+	averageLen float64
+	count      int64
+	items      map[string]string
 }
+
+//func (b *internBucket) debugStats() string {
+//	b.mu.RLock()
+//	a := b.averageLen
+//	c := b.count
+//	b.mu.RUnlock()
+//	return fmt.Sprintf("%d,%f", a, c)
+//}
 
 // adapted from bigcache
 // Sum64 gets the string and returns its uint64 hash value.
@@ -69,6 +81,27 @@ func init() {
 			}
 		}
 	}
+	go func() {
+		for {
+			<-time.After(1 * time.Second)
+			for i := range globalInternedBuckets {
+				dbg0 := []int64{}
+				dbg1 := []int64{}
+				for j := uint64(0); j < internShards; j++ {
+					b := globalInternedBuckets[i][j]
+					b.mu.RLock()
+					x := b.averageLen
+					y := b.count
+					b.mu.RUnlock()
+					dbg0 = append(dbg0, int64(x))
+					dbg1 = append(dbg1, y)
+				}
+
+				fmt.Printf("%d avg: %v\n", i, dbg0)
+				fmt.Printf("%d cnt: %v\n", i, dbg1)
+			}
+		}
+	}()
 	//if s := os.Getenv("INTERN_MB"); s != "" {
 	//	n, err := strconv.Atoi(s)
 	//	if err != nil {
@@ -115,9 +148,9 @@ func bucketPos(l int) int {
 		return 0
 	} else if l <= 64 {
 		return 1
-	} else if l <= 1024 {
+	} else if l <= 256 {
 		return 2
-	} else if l <= 4096 {
+	} else if l <= 512 {
 		return 3
 	} else {
 		return 4
@@ -141,6 +174,11 @@ func GetInternedStringFromBytes(x []byte) string {
 		// heap alloc
 		s = string(x)
 		b.items[s] = s
+
+		newAvg := (b.averageLen*float64(b.count) + float64(len(s))) / (float64(b.count) + 1)
+
+		b.averageLen = newAvg
+		b.count++
 	}
 	b.mu.Unlock()
 	return s
