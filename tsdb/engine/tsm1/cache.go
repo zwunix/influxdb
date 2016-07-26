@@ -6,7 +6,7 @@ import (
 	"log"
 	"math"
 	"os"
-	"sort"
+	// "sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -122,7 +122,7 @@ const (
 type Cache struct {
 	commit  sync.Mutex
 	mu      sync.RWMutex
-	store   map[string]*entry
+	store   map[OwnedString]*entry
 	size    uint64
 	maxSize uint64
 
@@ -147,7 +147,7 @@ type Cache struct {
 func NewCache(maxSize uint64, path string) *Cache {
 	c := &Cache{
 		maxSize:      maxSize,
-		store:        make(map[string]*entry),
+		store:        make(map[OwnedString]*entry),
 		stats:        &CacheStatistics{},
 		lastSnapshot: time.Now(),
 		arena:        NewCacheLocalArena(),
@@ -255,7 +255,7 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	// If no snapshot exists, create a new one, otherwise update the existing snapshot
 	if c.snapshot == nil {
 		c.snapshot = &Cache{
-			store: make(map[string]*entry),
+			store: make(map[OwnedString]*entry),
 		}
 	}
 
@@ -277,7 +277,7 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	snapshotSize := c.size // record the number of bytes written into a snapshot
 
 	// Reset the cache
-	c.store = make(map[string]*entry)
+	c.store = make(map[OwnedString]*entry)
 	c.size = 0
 	c.lastSnapshot = time.Now()
 
@@ -329,17 +329,18 @@ func (c *Cache) MaxSize() uint64 {
 
 // Keys returns a sorted slice of all keys under management by the cache.
 func (c *Cache) Keys() []string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	return nil
+	//c.mu.RLock()
+	//defer c.mu.RUnlock()
 
-	a := make([]string, len(c.store))
-	i := 0
-	for k, _ := range c.store {
-		a[i] = k
-		i++
-	}
-	sort.Strings(a)
-	return a
+	//a := make([]string, len(c.store))
+	//i := 0
+	//for k, _ := range c.store {
+	//	a[i] = k
+	//	i++
+	//}
+	//sort.Strings(a)
+	//return a
 }
 
 // Values returns a copy of all values, deduped and sorted, for the given key.
@@ -356,7 +357,12 @@ func (c *Cache) Delete(keys []string) {
 
 // DeleteRange will remove the values for all keys containing points
 // between min and max from the cache.
-func (c *Cache) DeleteRange(keys []string, min, max int64) {
+func (c *Cache) DeleteRange(strangerKeys []string, min, max int64) {
+	keys := make([]OwnedString, len(strangerKeys))
+	for i, sk := range strangerKeys {
+		os := c.arena.GetOwnedString(sk)
+		keys[i] = os
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -395,7 +401,10 @@ func (c *Cache) SetMaxSize(size uint64) {
 // sorted. It assumes all necessary locks have been taken. If the caller knows that the
 // the hot source data for the key will not be changed, it is safe to call this function
 // with a read-lock taken. Otherwise it must be called with a write-lock taken.
-func (c *Cache) merged(key string) Values {
+func (c *Cache) merged(strangerKey string) Values {
+	// this is not an ownership change
+	key := OwnedString(strangerKey)
+
 	e := c.store[key]
 	if e == nil {
 		if c.snapshot == nil {
@@ -456,7 +465,8 @@ func (c *Cache) merged(key string) Values {
 // Store returns the underlying cache store. This is not goroutine safe!
 // Protect access by using the Lock and Unlock functions on Cache.
 func (c *Cache) Store() map[string]*entry {
-	return c.store
+	return nil
+	//return c.store
 }
 
 func (c *Cache) RLock() {
@@ -469,8 +479,9 @@ func (c *Cache) RUnlock() {
 
 // values returns the values for the key. It doesn't lock and assumes the data is
 // already sorted. Should only be used in compact.go in the CacheKeyIterator
-func (c *Cache) values(key string) Values {
-	e := c.store[key]
+func (c *Cache) values(strangerKey string) Values {
+	// this is not an ownership change
+	e := c.store[OwnedString(strangerKey)]
 	if e == nil {
 		return nil
 	}
@@ -479,19 +490,23 @@ func (c *Cache) values(key string) Values {
 
 // write writes the set of values for the key to the cache. This function assumes
 // the lock has been taken and does not enforce the cache size limits.
-func (c *Cache) write(key string, values []Value) {
-	e, ok := c.store[key]
+func (c *Cache) write(strangerKey string, values []Value) {
+	// this is not an ownership change
+	e, ok := c.store[OwnedString(strangerKey)]
 	if !ok {
+		// this is an ownership change
+		key := c.arena.GetOwnedString(strangerKey)
 		e = newEntry()
 		c.store[key] = e
 	}
 	e.add(values)
 }
 
-func (c *Cache) entry(key string) *entry {
+func (c *Cache) entry(strangerKey string) *entry {
 	// low-contention path: entry exists, no write operations needed:
 	c.mu.RLock()
-	e, ok := c.store[key]
+	// this is an ownership change
+	e, ok := c.store[OwnedString(strangerKey)]
 	c.mu.RUnlock()
 
 	if ok {
@@ -502,8 +517,10 @@ func (c *Cache) entry(key string) *entry {
 	// one after checking again:
 	c.mu.Lock()
 
-	e, ok = c.store[key]
+	e, ok = c.store[OwnedString(strangerKey)]
 	if !ok {
+		// this is an ownership change
+		key := c.arena.GetOwnedString(strangerKey)
 		e = newEntry()
 		c.store[key] = e
 	}

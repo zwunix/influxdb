@@ -7,7 +7,11 @@ import (
 
 type OwnedString string
 
-func (os OwnedString) CopyInto(src []byte) {
+func (os OwnedString) CopyFromString(src string) {
+	dst := ownedStringToByteSlice(os)
+	copy(dst, src)
+}
+func (os OwnedString) CopyFromBytes(src []byte) {
 	dst := ownedStringToByteSlice(os)
 	copy(dst, src)
 }
@@ -25,6 +29,11 @@ func (s *CacheLocalArena) Get(l int) OwnedString {
 	buf := s.arena.Alloc(l)
 	x := byteSliceToOwnedString(buf)
 	return x
+}
+func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
+	os := s.Get(len(src))
+	os.CopyFromString(src)
+	return os
 }
 func (s *CacheLocalArena) Dec(x OwnedString) {
 	 buf := ownedStringToByteSlice(x)
