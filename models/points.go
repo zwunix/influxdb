@@ -1534,9 +1534,9 @@ func newFieldsFromBinary(buf []byte) Fields {
 
 		i, valueBuf = scanFieldValue(buf, i+1)
 		if len(name) > 0 {
-			//nameInterned := GetInternedStringFromBytes(name)
+			nameInterned := GetInternedStringFromBytes(name)
 			if len(valueBuf) == 0 {
-				fields[string(name)] = nil
+				fields[nameInterned] = nil
 				continue
 			}
 
@@ -1560,7 +1560,7 @@ func newFieldsFromBinary(buf []byte) Fields {
 					panic(fmt.Sprintf("unable to parse bool value '%v': %v\n", string(valueBuf), err))
 				}
 			}
-			fields[string(name)] = value
+			fields[nameInterned] = value
 		}
 		i++
 	}

@@ -558,9 +558,14 @@ func (e *Engine) addToIndexFromKey(shardID uint64, key string, fieldType influxq
 // Returns an error if new points are added to an existing key.
 func (e *Engine) WritePoints(points []models.Point) error {
 	values := map[string][]Value{}
+	buf := []byte{}
 	for _, p := range points {
 		for k, v := range p.Fields() {
-			key := string(p.Key()) + keyFieldSeparator + k
+			buf = buf[:0]
+			buf = append(buf, p.Key()...)
+			buf = append(buf, keyFieldSeparator...)
+			buf = append(buf, k...)
+			key := models.GetInternedStringFromBytes(buf)
 			values[key] = append(values[key], NewValue(p.Time().UnixNano(), v))
 		}
 	}
