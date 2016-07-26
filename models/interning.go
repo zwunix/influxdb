@@ -2,7 +2,7 @@
 package models
 
 import (
-	"fmt"
+	_ "fmt"
 	"os"
 	"strconv"
 	"sync"
@@ -10,7 +10,7 @@ import (
 	"unsafe"
 )
 
-//import "github.com/allegro/bigcache"
+import "github.com/allegro/bigcache"
 
 const (
 	// taken from bigcache
@@ -24,25 +24,17 @@ const (
 
 var (
 	internShards          uint64 = 32
-	internPrint           bool = false
+	internShardMB         int    = 16
+	internPrint           bool   = false
 	globalInternedBuckets [][]*internBucket
-	//internMB              int = 1024
 )
 
 type internBucket struct {
 	mu         sync.RWMutex
 	averageLen float64
 	count      int64
-	items      map[string]string
+	items      *bigcache.BigCache
 }
-
-//func (b *internBucket) debugStats() string {
-//	b.mu.RLock()
-//	a := b.averageLen
-//	c := b.count
-//	b.mu.RUnlock()
-//	return fmt.Sprintf("%d,%f", a, c)
-//}
 
 // adapted from bigcache
 // Sum64 gets the string and returns its uint64 hash value.
@@ -76,76 +68,53 @@ func init() {
 		internPrint = true
 	}
 	println("INTERN_PRINT is", internPrint)
+	if s := os.Getenv("INTERN_SHARD_MB"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			panic(err.Error())
+		}
+		internShardMB = n
+	}
+	println("INTERN_SHARD_MB is", internShardMB)
 
 	globalInternedBuckets = make([][]*internBucket, 5)
 	for i := 0; i < 5; i++ {
 		globalInternedBuckets[i] = make([]*internBucket, internShards)
 		for j := uint64(0); j < internShards; j++ {
 			globalInternedBuckets[i][j] = &internBucket{
-				items: make(map[string]string),
+				items: newBigCache(),
 			}
+			//globalInternedBuckets[i][j] = &internBucket{
+			//	items: make(map[string]string),
+			//}
 		}
 	}
-	go func() {
-		for {
-			<-time.After(1 * time.Second)
-			for i := range globalInternedBuckets {
-				dbg0 := []int64{}
-				dbg1 := []int64{}
-				for j := uint64(0); j < internShards; j++ {
-					b := globalInternedBuckets[i][j]
-					b.mu.RLock()
-					x := b.averageLen
-					y := b.count
-					b.mu.RUnlock()
-					dbg0 = append(dbg0, int64(x))
-					dbg1 = append(dbg1, y)
-				}
+	//go func() {
+	//	for {
+	//		<-time.After(1 * time.Second)
+	//		for i := range globalInternedBuckets {
+	//			dbg0 := []int64{}
+	//			dbg1 := []int64{}
+	//			for j := uint64(0); j < internShards; j++ {
+	//				b := globalInternedBuckets[i][j]
+	//				b.mu.RLock()
+	//				x := b.averageLen
+	//				y := b.count
+	//				b.mu.RUnlock()
+	//				dbg0 = append(dbg0, int64(x))
+	//				dbg1 = append(dbg1, y)
+	//			}
 
-				fmt.Printf("%d avg: %v\n", i, dbg0)
-				fmt.Printf("%d cnt: %v\n", i, dbg1)
-			}
-		}
-	}()
-	//if s := os.Getenv("INTERN_MB"); s != "" {
-	//	n, err := strconv.Atoi(s)
-	//	if err != nil {
-	//		panic(err.Error())
+	//			fmt.Printf("%d avg: %v\n", i, dbg0)
+	//			fmt.Printf("%d cnt: %v\n", i, dbg1)
+	//		}
 	//	}
-	//	internMB = n
-	//}
-	//println("INTERN_MB is", internMB)
-	//config := bigcache.Config{
-	//	// number of shards (must be a power of 2)
-	//	Shards: internShards,
-	//	// time after which entry can be evicted
-	//	LifeWindow: 10 * time.Minute,
-	//	// rps * lifeWindow, used only in initial memory allocation
-	//	MaxEntriesInWindow: 1e7,
-	//	// max entry size in bytes, used only in initial memory allocation
-	//	MaxEntrySize: 1024,
-	//	// prints information about additional memory allocation
-	//	Verbose: true,
-	//	// cache will not allocate more memory than this limit, value in MB
-	//	// if value is reached then the oldest entries can be overridden for the new ones
-	//	// 0 value means no size limit
-	//	HardMaxCacheSize: internMB,
-	//	// callback fired when the oldest entry is removed because of its
-	//	// expiration time or no space left for the new entry. Default value is nil which
-	//	// means no callback and it prevents from unwrapping the oldest entry.
-	//	OnRemove: nil,
-	//}
-
-	//bc, err := bigcache.NewBigCache(config)
-	//if err != nil {
-	//	panic(err.Error())
-	//}
-	//globalInternedStrings = bc
+	//}()
 }
 
-//func byteSliceToString(b []byte) string {
-//	return *(*string)(unsafe.Pointer(&b))
-//}
+func byteSliceToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
 
 func bucketPos(l int) int {
 	// heuristic
@@ -165,48 +134,77 @@ func GetInternedStringFromBytes(x []byte) string {
 	h := int(FNV64a_Sum64(x) % uint64(internShards))
 	b := globalInternedBuckets[bucketPos(len(x))][h]
 
-	b.mu.RLock()
-	s, ok := b.items[string(x)]
-	b.mu.RUnlock()
-
-	if ok {
-		return s
-	}
-
-	b.mu.Lock()
-	s, ok = b.items[string(x)]
-	if !ok {
-		// heap alloc
-		s = string(x)
-		b.items[s] = s
-
-		newAvg := (b.averageLen*float64(b.count) + float64(len(s))) / (float64(b.count) + 1)
-
-		b.averageLen = newAvg
-		b.count++
-	}
-	b.mu.Unlock()
-	return s
-
-	//sKey := byteSliceToString(x)
-	//bVal, err := globalInternedStrings.Get(sKey)
-	//ok := err == nil // (*BigCache).Get only has one kind of error
+	//b.mu.RLock()
+	//s, ok := b.items[string(x)]
+	//b.mu.RUnlock()
 
 	//if ok {
-	//	return byteSliceToString(bVal)
+	//	return s
 	//}
 
-	//// slow path: need to copy into the cache
+	//b.mu.Lock()
+	//s, ok = b.items[string(x)]
+	//if !ok {
+	//	// heap alloc
+	//	s = string(x)
+	//	b.items[s] = s
 
-	//err = globalInternedStrings.Set(sKey, x)
-	//if err != nil {
-	//	// (*BigCache).Set returns an error if it's full
-	//	return string(x) // failsafe alloc
-	//}
+	//	newAvg := (b.averageLen*float64(b.count) + float64(len(s))) / (float64(b.count) + 1)
 
-	//bVal, err = globalInternedStrings.Get(sKey)
-	//if err != nil {
-	//	panic("unepxected 2nd get error")
+	//	b.averageLen = newAvg
+	//	b.count++
 	//}
-	//return byteSliceToString(bVal)
+	//b.mu.Unlock()
+	//return s
+
+	sKey := byteSliceToString(x)
+	bVal, err := b.items.Get(sKey)
+	ok := err == nil // (*BigCache).Get only has one kind of error
+
+	if ok {
+		return byteSliceToString(bVal)
+	}
+
+	// slow path: need to copy into the cache
+
+	err = b.items.Set(sKey, x)
+	if err != nil {
+		// (*BigCache).Set returns an error if it's full
+		return string(x) // failsafe alloc
+	}
+
+	bVal, err = b.items.Get(sKey)
+	if err != nil {
+		panic("unepxected 2nd get error")
+	}
+	return byteSliceToString(bVal)
+}
+
+func newBigCache() *bigcache.BigCache {
+	config := bigcache.Config{
+		// number of shards (must be a power of 2)
+		Shards: 1,
+		// time after which entry can be evicted
+		LifeWindow: 10 * time.Minute,
+		// rps * lifeWindow, used only in initial memory allocation
+		//MaxEntriesInWindow: 1e7,
+		// max entry size in bytes, used only in initial memory allocation
+		//MaxEntrySize: 1024,
+		// prints information about additional memory allocation
+		Verbose: true,
+		// cache will not allocate more memory than this limit, value in MB
+		// if value is reached then the oldest entries can be overridden for the new ones
+		// 0 value means no size limit
+		HardMaxCacheSize: internShardMB,
+		// callback fired when the oldest entry is removed because of its
+		// expiration time or no space left for the new entry. Default value is nil which
+		// means no callback and it prevents from unwrapping the oldest entry.
+		OnRemove: nil,
+	}
+
+	bc, err := bigcache.NewBigCache(config)
+	if err != nil {
+		panic(err.Error())
+	}
+	return bc
 }
