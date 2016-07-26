@@ -3,6 +3,7 @@ package tsm1
 import (
 	"encoding/binary"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/influxdata/influxdb/influxql"
@@ -36,12 +37,94 @@ type Value interface {
 	internalOnly()
 }
 
+//var newIntegerValueChan = make(chan *IntegerValue, 1e6)
+//var newFloatValueChan = make(chan *FloatValue, 1e6)
+//func init() {
+//	go func() {
+//		for {
+//			vvs := make([]IntegerValue, 1e6)
+//			for i := range vvs {
+//				newIntegerValueChan <- &vvs[i]
+//			}
+//		}
+//	}()
+//	go func() {
+//		for {
+//			vvs := make([]FloatValue, 1e6)
+//			for i := range vvs {
+//				newFloatValueChan <- &vvs[i]
+//			}
+//		}
+//	}()
+//}
+
+type integerValueBatch struct {
+	mu *sync.Mutex
+	backing []IntegerValue
+	pos int64
+}
+
+var ivbmax int64 = 1e7
+var globalIntegerValueBatch = integerValueBatch {
+	mu: &sync.Mutex{},
+	backing: make([]IntegerValue, ivbmax),
+	pos: 0,
+}
+
+func (ivb *integerValueBatch) Get() *IntegerValue {
+	ivb.mu.Lock()
+	if ivb.pos == ivbmax {
+		ivb.pos = 0
+		ivb.backing = nil // abandon it for the GC
+		ivb.backing = make([]IntegerValue, ivbmax)
+	}
+	ret := &ivb.backing[ivb.pos]
+	ivb.pos++
+	ivb.mu.Unlock()
+	return ret
+
+}
+type floatValueBatch struct {
+	mu *sync.Mutex
+	backing []FloatValue
+	pos int64
+}
+
+var fvbmax int64 = 1e7
+var globalFloatValueBatch = floatValueBatch {
+	mu: &sync.Mutex{},
+	backing: make([]FloatValue, fvbmax),
+	pos: 0,
+}
+
+func (fvb *floatValueBatch) Get() *FloatValue {
+	fvb.mu.Lock()
+	if fvb.pos == fvbmax {
+		fvb.pos = 0
+		fvb.backing = nil // abandon it for the GC
+		fvb.backing = make([]FloatValue, fvbmax)
+	}
+	ret := &fvb.backing[fvb.pos]
+	fvb.pos++
+	fvb.mu.Unlock()
+	return ret
+
+}
+
 func NewValue(t int64, value interface{}) Value {
 	switch v := value.(type) {
 	case int64:
-		return &IntegerValue{unixnano: t, value: v}
+		iv := globalIntegerValueBatch.Get()
+		iv.unixnano = t
+		iv.value = v
+		return iv
+		//return &IntegerValue{unixnano: t, value: v}
 	case float64:
-		return &FloatValue{unixnano: t, value: v}
+		fv := globalFloatValueBatch.Get()
+		fv.unixnano = t
+		fv.value = v
+		return fv
+		//return &FloatValue{unixnano: t, value: v}
 	case bool:
 		return &BooleanValue{unixnano: t, value: v}
 	case string:

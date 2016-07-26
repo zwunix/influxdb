@@ -566,7 +566,8 @@ func (e *Engine) WritePoints(points []models.Point) error {
 			buf = append(buf, keyFieldSeparator...)
 			buf = append(buf, k...)
 			key := models.GetInternedStringFromBytes(buf)
-			values[key] = append(values[key], NewValue(p.Time().UnixNano(), v))
+			nv := NewValue(p.Time().UnixNano(), v)
+			values[key] = append(values[key], nv)
 		}
 	}
 
