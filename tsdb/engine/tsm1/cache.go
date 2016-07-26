@@ -138,6 +138,8 @@ type Cache struct {
 
 	stats        *CacheStatistics
 	lastSnapshot time.Time
+
+	arena *CacheLocalArena
 }
 
 // NewCache returns an instance of a cache which will use a maximum of maxSize bytes of memory.
@@ -148,6 +150,7 @@ func NewCache(maxSize uint64, path string) *Cache {
 		store:        make(map[string]*entry),
 		stats:        &CacheStatistics{},
 		lastSnapshot: time.Now(),
+		arena:        NewCacheLocalArena(),
 	}
 	c.UpdateAge()
 	c.UpdateCompactTime(0)
