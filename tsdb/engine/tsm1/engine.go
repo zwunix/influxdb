@@ -353,9 +353,10 @@ func (e *Engine) LoadMetadataIndex(shardID uint64, index *tsdb.DatabaseIndex) er
 	e.Cache.RLock() // shouldn't need the lock, but just to be safe
 	defer e.Cache.RUnlock()
 
-	for key, entry := range e.Cache.Store() {
+	for key, dtr := range e.Cache.KeysAndTypes() {
+		fieldType := dtr.Val
+		err := dtr.Err
 
-		fieldType, err := entry.values.InfluxQLType()
 		if err != nil {
 			e.logger.Printf("error getting the data type of values for key %s: %s", key, err.Error())
 			continue
@@ -657,7 +658,7 @@ func (e *Engine) DeleteSeriesRange(seriesKeys []string, min, max int64) error {
 	// find the keys in the cache and remove them
 	walKeys := make([]string, 0)
 	e.Cache.RLock()
-	s := e.Cache.Store()
+	s := e.Cache.KeysAndTypes()
 	for k, _ := range s {
 		seriesKey, _ := SeriesAndFieldFromCompositeKey(k)
 		if _, ok := keyMap[seriesKey]; ok {

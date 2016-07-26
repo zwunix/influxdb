@@ -6,11 +6,12 @@ import (
 	"log"
 	"math"
 	"os"
-	// "sort"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/models"
 )
 
@@ -467,12 +468,32 @@ func (c *Cache) merged(strangerKey string) Values {
 	return values
 }
 
+type DataTypeResult struct {
+	Val influxql.DataType
+	Err error
+}
+func (c *Cache) KeysAndTypes() map[string]DataTypeResult {
+	m := make(map[string]DataTypeResult, len(c.store))
+	buf := []byte{}
+	for k, e := range c.store {
+		buf = buf[:0]
+		buf = append(buf, k...)
+		heapString := string(buf)
+
+		dt, err := e.values.InfluxQLType()
+		dtr := DataTypeResult{Val: dt, Err: err}
+
+		m[heapString] = dtr
+	}
+	return m
+}
+
 // Store returns the underlying cache store. This is not goroutine safe!
 // Protect access by using the Lock and Unlock functions on Cache.
-func (c *Cache) Store() map[string]*entry {
-	return nil
-	//return c.store
-}
+//func (c *Cache) Store() map[string]*entry {
+//	return nil
+//	//return c.store
+//}
 
 func (c *Cache) RLock() {
 	c.mu.RLock()
