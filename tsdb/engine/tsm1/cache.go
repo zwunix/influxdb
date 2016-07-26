@@ -329,18 +329,23 @@ func (c *Cache) MaxSize() uint64 {
 
 // Keys returns a sorted slice of all keys under management by the cache.
 func (c *Cache) Keys() []string {
-	return nil
-	//c.mu.RLock()
-	//defer c.mu.RUnlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
-	//a := make([]string, len(c.store))
-	//i := 0
-	//for k, _ := range c.store {
-	//	a[i] = k
-	//	i++
-	//}
-	//sort.Strings(a)
-	//return a
+	a := make([]string, len(c.store))
+	i := 0
+	// we have to heap allocate new strings so that downstream consumers
+	// have expected behavior
+	buf := []byte{}
+	for k, _ := range c.store {
+		buf = buf[:0]
+		buf = append(buf, k...)
+		heapString := string(buf)
+		a[i] = heapString
+		i++
+	}
+	sort.Strings(a)
+	return a
 }
 
 // Values returns a copy of all values, deduped and sorted, for the given key.
