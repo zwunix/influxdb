@@ -23,7 +23,7 @@ func verboseMalloc(x int) []byte {
 
 func NewCacheLocalArena() *CacheLocalArena {
 	return &CacheLocalArena{
-		arena: slab.NewArena(1, 1*1024*1024, 2, verboseMalloc),
+		arena: slab.NewArena(1, 64*1024*1024, 2, verboseMalloc),
 	}
 }
 

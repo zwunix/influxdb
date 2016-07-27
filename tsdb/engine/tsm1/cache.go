@@ -275,8 +275,8 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	// If no snapshot exists, create a new one, otherwise update the existing snapshot
 	if c.snapshot == nil {
 		c.snapshot = &Cache{
-			store: make(map[OwnedString]*entry),
-			internedOwnedStrings: make(map[OwnedString]OwnedString),
+			store: make(map[OwnedString]*entry, len(c.store)),
+			internedOwnedStrings: make(map[OwnedString]OwnedString, len(c.internedOwnedStrings)),
 			arena: globalCacheArena,
 		}
 	}
@@ -501,9 +501,11 @@ type DataTypeResult struct {
 	Err error
 }
 
-func (c *Cache) KeysAndTypes() map[string]DataTypeResult {
-	m := make(map[string]DataTypeResult, len(c.store))
+func (c *Cache) KeysAndTypes() ([]string, []DataTypeResult) {
+	heapKeys := make([]string, len(c.store))
+	dtrs := make([]DataTypeResult, len(c.store))
 	buf := []byte{}
+	i := 0
 	for _, os := range c.internedOwnedStrings {
 		e := c.store[os]
 		buf = buf[:0]
@@ -513,9 +515,11 @@ func (c *Cache) KeysAndTypes() map[string]DataTypeResult {
 		dt, err := e.values.InfluxQLType()
 		dtr := DataTypeResult{Val: dt, Err: err}
 
-		m[heapString] = dtr
+		heapKeys[i] = heapString
+		dtrs[i] = dtr
+		i++
 	}
-	return m
+	return heapKeys, dtrs
 }
 
 // Store returns the underlying cache store. This is not goroutine safe!

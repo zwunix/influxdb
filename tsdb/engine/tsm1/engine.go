@@ -353,7 +353,10 @@ func (e *Engine) LoadMetadataIndex(shardID uint64, index *tsdb.DatabaseIndex) er
 	e.Cache.RLock() // shouldn't need the lock, but just to be safe
 	defer e.Cache.RUnlock()
 
-	for key, dtr := range e.Cache.KeysAndTypes() {
+	keys, dtrs := e.Cache.KeysAndTypes()
+	for i := range keys {
+		key := keys[i]
+		dtr := dtrs[i]
 		fieldType := dtr.Val
 		err := dtr.Err
 
@@ -658,8 +661,10 @@ func (e *Engine) DeleteSeriesRange(seriesKeys []string, min, max int64) error {
 	// find the keys in the cache and remove them
 	walKeys := make([]string, 0)
 	e.Cache.RLock()
-	s := e.Cache.KeysAndTypes()
-	for k, _ := range s {
+
+	keys, _ := e.Cache.KeysAndTypes()
+	for i := range keys {
+		k := keys[i]
 		seriesKey, _ := SeriesAndFieldFromCompositeKey(k)
 		if _, ok := keyMap[seriesKey]; ok {
 			walKeys = append(walKeys, k)
