@@ -26,6 +26,16 @@ func (os OwnedString) ViewAsBytes() []byte {
 	bufHeader := *(*[]byte)(unsafe.Pointer(&sliceHeader))
 	return bufHeader
 }
+func StringViewAsBytes(s string) []byte {
+	osHeader := *(*reflect.StringHeader)(unsafe.Pointer(&s))
+	sliceHeader := reflect.SliceHeader{
+		Data: osHeader.Data,
+		Len: osHeader.Len,
+		Cap: osHeader.Len,
+	}
+	bufHeader := *(*[]byte)(unsafe.Pointer(&sliceHeader))
+	return bufHeader
+}
 
 func verboseMalloc(x int) []byte {
 	println("go malloc", x)
@@ -59,15 +69,15 @@ func (s *CacheLocalArena) get(arenaId, l int) []byte {
 	return buf
 }
 func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
-	arenaId := int(FNV64a_Sum64([]byte(src)) % uint64(32))
+	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(32))
 
 	buf := s.get(arenaId, int(sizeOfSliceHeader) + len(src))
 	x := embedStrInBuf(buf, src)
 	os := *(*OwnedString)(unsafe.Pointer(&x))
 
 
-	s.Inc(os) // sanity check
-	s.Dec(os) // sanity check
+	//s.Inc(os) // sanity check
+	//s.Dec(os) // sanity check
 	return os
 }
 func (s *CacheLocalArena) Inc(os OwnedString) {
