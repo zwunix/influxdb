@@ -166,6 +166,9 @@ func NewCache(maxSize uint64, path string) *Cache {
 }
 
 func (c *Cache) destroyStore() {
+	c.store = make(map[OwnedString]*entry)
+	c.internedOwnedStrings = make(map[OwnedString]OwnedString)
+	return
 	for _, os := range c.internedOwnedStrings {
 		delete(c.internedOwnedStrings, os)
 		c.arena.Dec(os)
