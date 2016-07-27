@@ -49,7 +49,7 @@ var globalEntryBatch = entryBatch{
 
 func (eb *entryBatch) Get() *entry {
 	eb.mu.Lock()
-	if eb.pos == ivbmax {
+	if eb.pos == entrymax {
 		eb.pos = 0
 		eb.backing = nil // abandon it for the GC
 		eb.backing = make([]entry, entrymax)

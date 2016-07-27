@@ -63,7 +63,8 @@ var deduplicateMapPool = &sync.Pool{
 // Deduplicate returns a new slice with any values that have the same timestamp removed.
 // The Value that appears last in the slice is the one that is kept.
 func (a Values) Deduplicate() Values {
-	m := deduplicateMapPool.Get().(map[int64]Value)
+	//m := deduplicateMapPool.Get().(map[int64]Value)
+	m := make(map[int64]Value)
 	for _, val := range a {
 		m[val.UnixNano()] = val
 	}
@@ -73,10 +74,10 @@ func (a Values) Deduplicate() Values {
 		other = append(other, val)
 	}
 
-	for k := range m {
-		delete(m, k)
-	}
-	deduplicateMapPool.Put(m)
+	//for k := range m {
+	//	delete(m, k)
+	//}
+	//deduplicateMapPool.Put(m)
 
 	sort.Sort(other)
 	return other

@@ -83,6 +83,7 @@ type Server struct {
 	// Profiling
 	CPUProfile string
 	MemProfile string
+	ContentionProfile string
 
 	// httpAPIAddr is the host:port combination for the main HTTP API for querying and writing data
 	httpAPIAddr string
@@ -357,7 +358,7 @@ func (s *Server) Err() <-chan error { return s.err }
 // Open opens the meta and data store and all services.
 func (s *Server) Open() error {
 	// Start profiling, if set.
-	startProfile(s.CPUProfile, s.MemProfile)
+	startProfile(s.CPUProfile, s.MemProfile, s.ContentionProfile)
 
 	// Open shared TCP connection.
 	ln, err := net.Listen("tcp", s.BindAddress)
@@ -577,10 +578,11 @@ type Service interface {
 var prof struct {
 	cpu *os.File
 	mem *os.File
+	contention *os.File
 }
 
 // StartProfile initializes the cpu and memory profile, if specified.
-func startProfile(cpuprofile, memprofile string) {
+func startProfile(cpuprofile, memprofile, contentionprofile string) {
 	if cpuprofile != "" {
 		f, err := os.Create(cpuprofile)
 		if err != nil {
@@ -600,6 +602,14 @@ func startProfile(cpuprofile, memprofile string) {
 		prof.mem = f
 		runtime.MemProfileRate = 4096
 	}
+	if contentionprofile != "" {
+		f, err := os.Create(contentionprofile)
+		if err != nil {
+			log.Fatalf("contentionprofile: %v", err)
+		}
+		log.Printf("writing contention profile to: %s\n", contentionprofile)
+		prof.contention = f
+	}
 
 }
 
@@ -614,6 +624,11 @@ func stopProfile() {
 		pprof.Lookup("heap").WriteTo(prof.mem, 0)
 		prof.mem.Close()
 		log.Println("mem profile stopped")
+	}
+	if prof.contention != nil {
+		pprof.Lookup("block").WriteTo(prof.contention, 0)
+		prof.contention.Close()
+		log.Println("contention profile stopped")
 	}
 }
 

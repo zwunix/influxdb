@@ -113,6 +113,7 @@ func (cmd *Command) Run(args ...string) error {
 	}
 	s.CPUProfile = options.CPUProfile
 	s.MemProfile = options.MemProfile
+	s.ContentionProfile = options.ContentionProfile
 	if err := s.Open(); err != nil {
 		return fmt.Errorf("open server: %s", err)
 	}
@@ -156,6 +157,7 @@ func (cmd *Command) ParseFlags(args ...string) (Options, error) {
 	_ = fs.String("hostname", "", "")
 	fs.StringVar(&options.CPUProfile, "cpuprofile", "", "")
 	fs.StringVar(&options.MemProfile, "memprofile", "", "")
+	fs.StringVar(&options.ContentionProfile, "contentionprofile", "", "")
 	fs.Usage = func() { fmt.Fprintln(cmd.Stderr, usage) }
 	if err := fs.Parse(args); err != nil {
 		return Options{}, err
@@ -229,6 +231,7 @@ type Options struct {
 	PIDFile    string
 	CPUProfile string
 	MemProfile string
+	ContentionProfile string
 }
 
 // GetConfigPath returns the config path from the options.

@@ -3,6 +3,7 @@ package tsm1
 import (
 	"fmt"
 	"reflect"
+	//"os"
 	"sync"
 	"time"
 	"unsafe"
@@ -43,7 +44,7 @@ func verboseMalloc(x int) []byte {
 	return make([]byte, x)
 }
 
-const NSHARDS = 4
+var NSHARDS = 1
 
 func NewCacheLocalArena() *CacheLocalArena {
 	arenas := make([]*slab.Arena, NSHARDS)
@@ -54,7 +55,7 @@ func NewCacheLocalArena() *CacheLocalArena {
 			println("go malloc", j, l)
 			return make([]byte, l)
 		}
-		arenas[i] = slab.NewArena(32, 64*1024*1024, 2, f)
+		arenas[i] = slab.NewArena(1, 1*1024*1024, 2, f)
 		mus[i] = &sync.Mutex{}
 	}
 	cla := &CacheLocalArena{
@@ -125,11 +126,11 @@ func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
 
-	mu.Lock()
 	for i := 0; i < n; i++ {
+		mu.Lock()
 		arena.AddRef(embeddedBuf)
+		mu.Unlock()
 	}
-	mu.Unlock()
 }
 func (s *CacheLocalArena) DecOnce(os OwnedString) bool {
 	return s.Dec(os, 1)
@@ -182,8 +183,8 @@ func embedStrInBuf(buf []byte, s string) string {
 }
 func accessBufFromStr(os string) ([]byte, uint64) {
 	strHeader := *(*reflect.StringHeader)(unsafe.Pointer(&os))
-	sliceHeaderStart := (unsafe.Pointer)(strHeader.Data - sizeOfSliceHeader - 8)
-	sliceHeader := *(*reflect.SliceHeader)(sliceHeaderStart)
+	sliceHeaderStart := strHeader.Data - sizeOfSliceHeader - 8
+	sliceHeader := *(*reflect.SliceHeader)(unsafe.Pointer(sliceHeaderStart))
 	hashStart := strHeader.Data - 8
 	hash := *(*uint64)(unsafe.Pointer(hashStart))
 	slice := *(*[]byte)(unsafe.Pointer(&sliceHeader))
