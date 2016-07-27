@@ -46,9 +46,14 @@ func verboseMalloc(x int) []byte {
 
 var NSHARDS = 1
 
+type Job interface {
+	Do(*slab.Arena)
+}
+
 func NewCacheLocalArena() *CacheLocalArena {
 	arenas := make([]*slab.Arena, NSHARDS)
 	mus := make([]*sync.Mutex, NSHARDS)
+	queues := make([]chan Job, NSHARDS)
 	for i := range arenas {
 		j := i
 		f := func(l int) []byte {
@@ -57,10 +62,21 @@ func NewCacheLocalArena() *CacheLocalArena {
 		}
 		arenas[i] = slab.NewArena(1, 1*1024*1024, 2, f)
 		mus[i] = &sync.Mutex{}
+		queues[i] = make(chan Job, 1000)
 	}
 	cla := &CacheLocalArena{
 		arenas: arenas,
 		mus:    mus,
+		queues: queues,
+	}
+	for i := range arenas {
+		go func(i int) {
+			for j := range cla.queues[i] {
+				cla.mus[i].Lock()
+				j.Do(arenas[i])
+				cla.mus[i].Unlock()
+			}
+		}(i)
 	}
 
 	go func(cla *CacheLocalArena) {
@@ -97,26 +113,37 @@ func NewCacheLocalArena() *CacheLocalArena {
 type CacheLocalArena struct {
 	mus    []*sync.Mutex
 	arenas []*slab.Arena
+	queues []chan Job
 }
 
-func (s *CacheLocalArena) get(arenaId, l int) []byte {
-	arena := s.arenas[arenaId]
-	mu := s.mus[arenaId]
-	mu.Lock()
-	buf := arena.Alloc(l)
-	mu.Unlock()
-	return buf
-}
+//func (s *CacheLocalArena) get(arenaId, l int) []byte {
+//	arena := s.arenas[arenaId]
+//	mu := s.mus[arenaId]
+//	mu.Lock()
+//	buf := arena.Alloc(l)
+//	mu.Unlock()
+//	return buf
+//}
 func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(NSHARDS))
 
-	buf := s.get(arenaId, int(sizeOfSliceHeader)+len(src)+8)
-	x := embedStrInBuf(buf, src)
-	os := *(*OwnedString)(unsafe.Pointer(&x))
+	ret := make(chan OwnedString)
+	j := &getOwnedStringJob{
+		src: src,
+		ret: ret,
+	}
+
+	s.queues[arenaId] <- j
+	return <-ret
+	
+
+	//buf := s.get(arenaId, int(sizeOfSliceHeader)+len(src)+8)
+	//x := embedStrInBuf(buf, src)
+	//os := *(*OwnedString)(unsafe.Pointer(&x))
 
 	//s.Inc(os) // sanity check
 	//s.Dec(os) // sanity check
-	return os
+	//return os
 }
 func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	strCast := *(*string)(unsafe.Pointer(&os))
@@ -132,9 +159,36 @@ func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 		mu.Unlock()
 	}
 }
-func (s *CacheLocalArena) DecOnce(os OwnedString) bool {
-	return s.Dec(os, 1)
+
+//func (s *CacheLocalArena) DecOnce(os OwnedString) bool {
+//	return s.Dec(os, 1)
+//}
+
+type getOwnedStringJob struct {
+	src  string
+	//wg   *sync.WaitGroup
+	ret chan OwnedString
 }
+
+func (gj *getOwnedStringJob) Do(arena *slab.Arena) {
+	//arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(NSHARDS))
+
+	l := int(sizeOfSliceHeader)+len(gj.src)+8
+ 	buf := arena.Alloc(l)
+	x := embedStrInBuf(buf, gj.src)
+	os := *(*OwnedString)(unsafe.Pointer(&x))
+	gj.ret <- os
+}
+
+
+//type incJob struct {
+//	buf []byte
+//	wg  *sync.WaitGroup
+//}
+//type decJob struct {
+//	buf []byte
+//	wg  *sync.WaitGroup
+//}
 
 func (s *CacheLocalArena) Dec(os OwnedString, n int) bool {
 	strCast := *(*string)(unsafe.Pointer(&os))

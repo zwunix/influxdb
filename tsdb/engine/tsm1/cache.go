@@ -201,6 +201,7 @@ func reclaimStore(cla *CacheLocalArena, m0 map[OwnedString]*entry, m1 map[OwnedS
 		//delete(m1, os)
 		cla.Dec(os, 1)
 	}
+	//wg.Wait()
 	//if len(m0) != 0 {
 	//	panic("nonempty m0 on reclaimStore")
 	//}

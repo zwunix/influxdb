@@ -227,10 +227,10 @@ Usage: influxd run [flags]
 
 // Options represents the command line options that can be parsed.
 type Options struct {
-	ConfigPath string
-	PIDFile    string
-	CPUProfile string
-	MemProfile string
+	ConfigPath        string
+	PIDFile           string
+	CPUProfile        string
+	MemProfile        string
 	ContentionProfile string
 }
 

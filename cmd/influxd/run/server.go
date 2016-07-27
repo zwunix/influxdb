@@ -81,8 +81,8 @@ type Server struct {
 	reportingDisabled bool
 
 	// Profiling
-	CPUProfile string
-	MemProfile string
+	CPUProfile        string
+	MemProfile        string
 	ContentionProfile string
 
 	// httpAPIAddr is the host:port combination for the main HTTP API for querying and writing data
@@ -576,8 +576,8 @@ type Service interface {
 
 // prof stores the file locations of active profiles.
 var prof struct {
-	cpu *os.File
-	mem *os.File
+	cpu        *os.File
+	mem        *os.File
 	contention *os.File
 }
 
