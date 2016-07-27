@@ -122,22 +122,39 @@ func (s *CacheLocalArena) get(arenaId, l int) []byte {
 	mu.Unlock()
 	return buf
 }
+
+type GetOwnedStringJob struct {
+	l int
+	mu *sync.Mutex
+	arena *slab.Arena
+	ret chan []byte
+}
+func (j GetOwnedStringJob) Do() {
+		println("trying to do GetOwnedString")
+		j.mu.Lock()
+		buf := j.arena.Alloc(j.l)
+		j.mu.Unlock()
+		j.ret<-buf
+}
+var GetOwnedStringJobPool = &sync.Pool{
+	New: func() interface{} {
+		return GetOwnedStringJob{
+			ret: make(chan []byte, 1),
+		}
+	},
+}
 func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	l := int(sizeOfSliceHeader)+len(src)+8
 	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(NSHARDS))
-	arena := s.arenas[arenaId]
-	mu := s.mus[arenaId]
-	ret := make(chan []byte, 1)
 
-	do := func() {
-		println("trying to do GetOwnedString")
-		mu.Lock()
-		buf := arena.Alloc(l)
-		mu.Unlock()
-		ret<-buf
-	}
-	s.queues[arenaId] <- do
-	buf := <-ret
+	j := GetOwnedStringJobPool.Get().(GetOwnedStringJob)
+	j.l = l
+	j.arena = s.arenas[arenaId]
+	j.mu = s.mus[arenaId]
+
+	s.queues[arenaId] <- j.Do
+	buf := <-j.ret
+	GetOwnedStringJobPool.Put(j)
 
 	x := embedStrInBuf(buf, src)
 	os := *(*OwnedString)(unsafe.Pointer(&x))
