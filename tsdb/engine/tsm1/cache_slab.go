@@ -3,7 +3,6 @@ package tsm1
 import (
 	"fmt"
 	"reflect"
-	"sort"
 	"sync"
 	"time"
 	"unsafe"
@@ -22,8 +21,8 @@ func (os OwnedString) ViewAsBytes() []byte {
 	osHeader := *(*reflect.StringHeader)(unsafe.Pointer(&os))
 	sliceHeader := reflect.SliceHeader{
 		Data: osHeader.Data,
-		Len: osHeader.Len,
-		Cap: osHeader.Len,
+		Len:  osHeader.Len,
+		Cap:  osHeader.Len,
 	}
 	bufHeader := *(*[]byte)(unsafe.Pointer(&sliceHeader))
 	return bufHeader
@@ -32,8 +31,8 @@ func StringViewAsBytes(s string) []byte {
 	osHeader := *(*reflect.StringHeader)(unsafe.Pointer(&s))
 	sliceHeader := reflect.SliceHeader{
 		Data: osHeader.Data,
-		Len: osHeader.Len,
-		Cap: osHeader.Len,
+		Len:  osHeader.Len,
+		Cap:  osHeader.Len,
 	}
 	bufHeader := *(*[]byte)(unsafe.Pointer(&sliceHeader))
 	return bufHeader
@@ -45,6 +44,7 @@ func verboseMalloc(x int) []byte {
 }
 
 const NSHARDS = 4
+
 func NewCacheLocalArena() *CacheLocalArena {
 	arenas := make([]*slab.Arena, NSHARDS)
 	mus := make([]*sync.Mutex, NSHARDS)
@@ -59,31 +59,33 @@ func NewCacheLocalArena() *CacheLocalArena {
 	}
 	cla := &CacheLocalArena{
 		arenas: arenas,
-		mus: mus,
+		mus:    mus,
 	}
 
 	go func(cla *CacheLocalArena) {
 		for {
-			<-time.After(5*time.Second)
+			<-time.After(5 * time.Second)
 			for i := range cla.mus {
 				stats := map[string]int64{}
 				cla.mus[i].Lock()
 				cla.arenas[i].Stats(stats)
 				cla.mus[i].Unlock()
 				if stats["totAllocs"] > 0 {
-					keys := []string{}
-					for key := range stats {
-						keys = append(keys, key)
-					}
-					sort.Strings(keys)
-					s := fmt.Sprintf("%d: ", i)
-					for i, key := range keys {
-						s += fmt.Sprintf("%v: %v", key, stats[key])
-						if i + 1 < len(keys) {
-							s += ", "
-						}
-					}
-					fmt.Println(s)
+					fmt.Printf("%d/%d: totAllocs: %d, totAddRefs: %d, totDecRefs: %d, totDecRefZeroes: %d\n", i+1, len(cla.mus),
+						stats["totAllocs"], stats["totAddRefs"], stats["totDecRefs"], stats["totDecRefZeroes"])
+					//keys := []string{}
+					//for key := range stats {
+					//	keys = append(keys, key)
+					//}
+					//sort.Strings(keys)
+					//s := fmt.Sprintf("%d: ", i)
+					//for i, key := range keys {
+					//	s += fmt.Sprintf("%v: %v", key, stats[key])
+					//	if i + 1 < len(keys) {
+					//		s += ", "
+					//	}
+					//}
+					//fmt.Println(s)
 				}
 			}
 		}
@@ -107,10 +109,9 @@ func (s *CacheLocalArena) get(arenaId, l int) []byte {
 func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(NSHARDS))
 
-	buf := s.get(arenaId, int(sizeOfSliceHeader) + len(src) + 8)
+	buf := s.get(arenaId, int(sizeOfSliceHeader)+len(src)+8)
 	x := embedStrInBuf(buf, src)
 	os := *(*OwnedString)(unsafe.Pointer(&x))
-
 
 	//s.Inc(os) // sanity check
 	//s.Dec(os) // sanity check
@@ -124,12 +125,11 @@ func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
 
-
-		mu.Lock()
+	mu.Lock()
 	for i := 0; i < n; i++ {
 		arena.AddRef(embeddedBuf)
 	}
-		mu.Unlock()
+	mu.Unlock()
 }
 func (s *CacheLocalArena) DecOnce(os OwnedString) bool {
 	return s.Dec(os, 1)
@@ -153,7 +153,7 @@ func (s *CacheLocalArena) Dec(os OwnedString, n int) bool {
 }
 
 func embedStrInBuf(buf []byte, s string) string {
-	if len(buf) != len(s) + int(sizeOfSliceHeader) + 8 {
+	if len(buf) != len(s)+int(sizeOfSliceHeader)+8 {
 		panic("logic error in embedStrInBuf input")
 	}
 
@@ -164,7 +164,7 @@ func embedStrInBuf(buf []byte, s string) string {
 
 	// second, copy the hash into the next 8 bytes:
 	hash := FNV64a_Sum64(StringViewAsBytes(s))
-	dst8 := (*uint64)(unsafe.Pointer(&buf[sizeOfSliceHeader:sizeOfSliceHeader+8][0]))
+	dst8 := (*uint64)(unsafe.Pointer(&buf[sizeOfSliceHeader : sizeOfSliceHeader+8][0]))
 	*dst8 = hash
 
 	// third, copy the string bytes to the buffer:
@@ -174,7 +174,7 @@ func embedStrInBuf(buf []byte, s string) string {
 	// return it as a string:
 	strHeader := reflect.StringHeader{
 		Data: uintptr(unsafe.Pointer(&(buf[sizeOfSliceHeader+8]))),
-		Len: len(s),
+		Len:  len(s),
 	}
 
 	str := *(*string)(unsafe.Pointer(&strHeader))
@@ -189,6 +189,7 @@ func accessBufFromStr(os string) ([]byte, uint64) {
 	slice := *(*[]byte)(unsafe.Pointer(&sliceHeader))
 	return slice, hash
 }
+
 // hashing/buckets
 const (
 	// taken from bigcache
@@ -199,10 +200,10 @@ const (
 	// prime64 FNVa prime value. See https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function#FNV-1a_hash
 	prime64 = 1099511628211
 )
+
 // adapted from bigcache
 // Sum64 gets the string and returns its uint64 hash value.
 func FNV64a_Sum64(key []byte) uint64 {
-	return 0
 	var hash uint64 = offset64
 	i := 0
 	// this speedup may break FNV1a hash properties

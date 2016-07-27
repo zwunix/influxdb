@@ -33,17 +33,18 @@ func newEntry() *entry {
 	return globalEntryBatch.Get()
 	//return &entry{}
 }
+
 type entryBatch struct {
-	mu *sync.Mutex
+	mu      *sync.Mutex
 	backing []entry
-	pos int64
+	pos     int64
 }
 
 var entrymax int64 = 1e7
-var globalEntryBatch = entryBatch {
-	mu: &sync.Mutex{},
+var globalEntryBatch = entryBatch{
+	mu:      &sync.Mutex{},
 	backing: make([]entry, entrymax),
-	pos: 0,
+	pos:     0,
 }
 
 func (eb *entryBatch) Get() *entry {
@@ -302,9 +303,9 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	// If no snapshot exists, create a new one, otherwise update the existing snapshot
 	if c.snapshot == nil {
 		c.snapshot = &Cache{
-			store: make(map[OwnedString]*entry, len(c.store)),
+			store:                make(map[OwnedString]*entry, len(c.store)),
 			internedOwnedStrings: make(map[OwnedString]OwnedString, len(c.internedOwnedStrings)),
-			arena: globalCacheArena,
+			arena:                globalCacheArena,
 		}
 	}
 
@@ -377,7 +378,6 @@ func (c *Cache) ClearSnapshot(success bool) {
 		oldArena := old.arena
 		println("RECLAIMING STORE FROM CLEARSNAPSHOT")
 		go reclaimStore(oldArena, oldM0, oldM1)
-
 
 	}
 }
