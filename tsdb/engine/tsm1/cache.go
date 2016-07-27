@@ -337,9 +337,11 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	oldM0 := c.store
 	oldM1 := c.internedOwnedStrings
 	oldArena := c.arena
+	c.store = nil
+	c.internedOwnedStrings = nil
+	reclaimStore(oldArena, oldM0, oldM1)
 	c.store = make(map[OwnedString]*entry, len(oldM0))
 	c.internedOwnedStrings = make(map[OwnedString]OwnedString, len(oldM1))
-	reclaimStore(oldArena, oldM0, oldM1)
 
 	c.size = 0
 	c.lastSnapshot = time.Now()

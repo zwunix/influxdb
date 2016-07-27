@@ -44,7 +44,7 @@ func verboseMalloc(x int) []byte {
 	return make([]byte, x)
 }
 
-var NSHARDS = 32
+var NSHARDS = 1
 
 func NewCacheLocalArena() *CacheLocalArena {
 	arenas := make([]*slab.Arena, NSHARDS)
@@ -126,7 +126,7 @@ func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
 
-	for i := 0; i < n; i++ {
+	for ; n > 0; n-- {
 		mu.Lock()
 		arena.AddRef(embeddedBuf)
 		mu.Unlock()
