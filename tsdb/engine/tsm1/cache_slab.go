@@ -68,9 +68,11 @@ func NewCacheLocalArena() *CacheLocalArena {
 
 	for i := range arenas {
 		go func(i int) {
-			queue := queues[i]
+			queue := cla.queues[i]
+			println("started worker", i)
 			for j := range queue {
-				j.Do()
+				println(i, "doing a job")
+				j()
 			}
 		}(i)
 	}
@@ -121,9 +123,22 @@ func (s *CacheLocalArena) get(arenaId, l int) []byte {
 	return buf
 }
 func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
+	l := int(sizeOfSliceHeader)+len(src)+8
 	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(NSHARDS))
+	arena := s.arenas[arenaId]
+	mu := s.mus[arenaId]
+	ret := make(chan []byte, 1)
 
-	buf := s.get(arenaId, int(sizeOfSliceHeader)+len(src)+8)
+	do := func() {
+		println("trying to do GetOwnedString")
+		mu.Lock()
+		buf := arena.Alloc(l)
+		mu.Unlock()
+		ret<-buf
+	}
+	s.queues[arenaId] <- do
+	buf := <-ret
+
 	x := embedStrInBuf(buf, src)
 	os := *(*OwnedString)(unsafe.Pointer(&x))
 
@@ -139,16 +154,21 @@ func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
 
-	for ; n > 0; n-- {
-		mu.Lock()
-		arena.AddRef(embeddedBuf)
-		mu.Unlock()
-	}
-}
-//func (s *CacheLocalArena) DecOnce(os OwnedString) bool {
-//	return s.Dec(os, 1)
-//}
+	ret := make(chan bool, 1)
 
+	do := func() {
+		println("trying to do Inc")
+		for i := 0; i < n; i++ {
+			mu.Lock()
+			arena.AddRef(embeddedBuf)
+			mu.Unlock()
+		}
+	}
+
+	s.queues[arenaId] <- do
+
+	<-ret
+}
 func (s *CacheLocalArena) Dec(os OwnedString, n int) bool {
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf, hash := accessBufFromStr(strCast)
@@ -159,6 +179,7 @@ func (s *CacheLocalArena) Dec(os OwnedString, n int) bool {
 	ret := make(chan bool, 1)
 
 	do := func() {
+		println("trying to do Dec")
 		var zeroed bool
 		mu.Lock()
 		for i := 0; i < n; i++ {
@@ -168,7 +189,7 @@ func (s *CacheLocalArena) Dec(os OwnedString, n int) bool {
 		ret <- zeroed
 	}
 
-	s.queues[i] <- do
+	s.queues[arenaId] <- do
 
 	return <-ret
 }
@@ -241,6 +262,4 @@ func FNV64a_Sum64(key []byte) uint64 {
 	return hash
 }
 
-type CLAJob interface{
-	Do()
-}
+type CLAJob func()
