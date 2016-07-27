@@ -339,7 +339,7 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	oldArena := c.arena
 	c.store = make(map[OwnedString]*entry, len(oldM0))
 	c.internedOwnedStrings = make(map[OwnedString]OwnedString, len(oldM1))
-	go reclaimStore(oldArena, oldM0, oldM1)
+	reclaimStore(oldArena, oldM0, oldM1)
 
 	c.size = 0
 	c.lastSnapshot = time.Now()
@@ -381,7 +381,7 @@ func (c *Cache) ClearSnapshot(success bool) {
 		oldM1 := old.internedOwnedStrings
 		oldArena := old.arena
 		println("RECLAIMING STORE FROM CLEARSNAPSHOT")
-		go reclaimStore(oldArena, oldM0, oldM1)
+		reclaimStore(oldArena, oldM0, oldM1)
 
 	}
 }

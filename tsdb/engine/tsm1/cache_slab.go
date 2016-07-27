@@ -44,7 +44,7 @@ func verboseMalloc(x int) []byte {
 	return make([]byte, x)
 }
 
-var NSHARDS = 1
+var NSHARDS = 32
 
 func NewCacheLocalArena() *CacheLocalArena {
 	arenas := make([]*slab.Arena, NSHARDS)
