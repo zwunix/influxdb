@@ -51,7 +51,7 @@ func NewCacheLocalArena() *CacheLocalArena {
 			println("go malloc", j, l)
 			return make([]byte, l)
 		}
-		arenas[i] = slab.NewArena(1, 32*1024*1024, 2, f)
+		arenas[i] = slab.NewArena(1, 4*1024*1024, 2, f)
 		mus[i] = &sync.Mutex{}
 	}
 	return &CacheLocalArena{
@@ -76,7 +76,7 @@ func (s *CacheLocalArena) get(arenaId, l int) []byte {
 func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(32))
 
-	buf := s.get(arenaId, int(sizeOfSliceHeader) + len(src))
+	buf := s.get(arenaId, int(sizeOfSliceHeader) + len(src) + 8)
 	x := embedStrInBuf(buf, src)
 	os := *(*OwnedString)(unsafe.Pointer(&x))
 
@@ -86,24 +86,25 @@ func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	return os
 }
 func (s *CacheLocalArena) Inc(os OwnedString) {
-	arenaId := int(FNV64a_Sum64(os.ViewAsBytes()) % uint64(32))
+	strCast := *(*string)(unsafe.Pointer(&os))
+	embeddedBuf, hash := accessBufFromStr(strCast)
+
+	arenaId := hash % uint64(32)
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
 
-	strCast := *(*string)(unsafe.Pointer(&os))
-	embeddedBuf := accessBufFromStr(strCast)
 
 	mu.Lock()
 	arena.AddRef(embeddedBuf)
 	mu.Unlock()
 }
 func (s *CacheLocalArena) Dec(os OwnedString) {
-	arenaId := int(FNV64a_Sum64(os.ViewAsBytes()) % uint64(32))
+	strCast := *(*string)(unsafe.Pointer(&os))
+	embeddedBuf, hash := accessBufFromStr(strCast)
+
+	arenaId := hash % uint64(32)
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
-
-	strCast := *(*string)(unsafe.Pointer(&os))
-	embeddedBuf := accessBufFromStr(strCast)
 
 	mu.Lock()
 	arena.DecRef(embeddedBuf)
@@ -111,12 +112,12 @@ func (s *CacheLocalArena) Dec(os OwnedString) {
 }
 
 func (s *CacheLocalArena) DecMulti(os OwnedString, n int) {
-	arenaId := int(FNV64a_Sum64(os.ViewAsBytes()) % uint64(32))
+	strCast := *(*string)(unsafe.Pointer(&os))
+	embeddedBuf, hash := accessBufFromStr(strCast)
+
+	arenaId := hash % uint64(32)
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
-
-	strCast := *(*string)(unsafe.Pointer(&os))
-	embeddedBuf := accessBufFromStr(strCast)
 
 	mu.Lock()
 	for i := 0; i < n; i++ {
@@ -126,7 +127,7 @@ func (s *CacheLocalArena) DecMulti(os OwnedString, n int) {
 }
 
 func embedStrInBuf(buf []byte, s string) string {
-	if len(buf) != len(s) + int(sizeOfSliceHeader) {
+	if len(buf) != len(s) + int(sizeOfSliceHeader) + 8 {
 		panic("logic error in embedStrInBuf input")
 	}
 
@@ -135,25 +136,32 @@ func embedStrInBuf(buf []byte, s string) string {
 	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&(buf[:sizeOfSliceHeader][0])))
 	*dstHeader = *srcHeader
 
-	// second, copy the string bytes to the buffer:
-	copy(buf[sizeOfSliceHeader:], s)
+	// second, copy the hash into the next 8 bytes:
+	hash := FNV64a_Sum64(StringViewAsBytes(s))
+	dst8 := (*uint64)(unsafe.Pointer(&buf[sizeOfSliceHeader:sizeOfSliceHeader+8][0]))
+	*dst8 = hash
 
-	// third, and finally, construct a string header on the stack and
+	// third, copy the string bytes to the buffer:
+	copy(buf[sizeOfSliceHeader+8:], s)
+
+	// fourth, and finally, construct a string header on the stack and
 	// return it as a string:
 	strHeader := reflect.StringHeader{
-		Data: uintptr(unsafe.Pointer(&(buf[sizeOfSliceHeader]))),
+		Data: uintptr(unsafe.Pointer(&(buf[sizeOfSliceHeader+8]))),
 		Len: len(s),
 	}
 
 	str := *(*string)(unsafe.Pointer(&strHeader))
 	return str
 }
-func accessBufFromStr(os string) []byte {
+func accessBufFromStr(os string) ([]byte, uint64) {
 	strHeader := *(*reflect.StringHeader)(unsafe.Pointer(&os))
-	sliceHeaderStart := strHeader.Data - sizeOfSliceHeader
+	sliceHeaderStart := strHeader.Data - sizeOfSliceHeader - 8
 	sliceHeader := *(*reflect.SliceHeader)(unsafe.Pointer(sliceHeaderStart))
+	hashStart := strHeader.Data - 8
+	hash := *(*uint64)(unsafe.Pointer(hashStart))
 	slice := *(*[]byte)(unsafe.Pointer(&sliceHeader))
-	return slice
+	return slice, hash
 }
 // hashing/buckets
 const (
