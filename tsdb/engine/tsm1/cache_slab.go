@@ -57,7 +57,6 @@ func (s *CacheLocalArena) Inc(os OwnedString) {
 	s.mu.Unlock()
 }
 func (s *CacheLocalArena) Dec(os OwnedString) {
-	return
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf := accessBufFromStr(strCast)
 

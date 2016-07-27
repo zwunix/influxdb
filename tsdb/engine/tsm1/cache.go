@@ -166,9 +166,6 @@ func NewCache(maxSize uint64, path string) *Cache {
 }
 
 func (c *Cache) destroyStore() {
-	c.store = make(map[OwnedString]*entry)
-	c.internedOwnedStrings = make(map[OwnedString]OwnedString)
-	return
 	for _, os := range c.internedOwnedStrings {
 		delete(c.internedOwnedStrings, os)
 		c.arena.Dec(os)
@@ -279,6 +276,7 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	if c.snapshot == nil {
 		c.snapshot = &Cache{
 			store: make(map[OwnedString]*entry),
+			internedOwnedStrings: make(map[OwnedString]OwnedString),
 			arena: globalCacheArena,
 		}
 	}
@@ -291,7 +289,9 @@ func (c *Cache) Snapshot() (*Cache, error) {
 			c.snapshot.store[os].add(e.values)
 		} else {
 			c.arena.Inc(os)
+			c.arena.Inc(os)
 			c.snapshot.store[os] = e
+			c.snapshot.internedOwnedStrings[os] = os
 		}
 		c.snapshotSize += uint64(Values(e.values).Size())
 		if e.needSort {
@@ -552,10 +552,9 @@ func (c *Cache) write(strangerKey string, values []Value) {
 	if !ok {
 		// this is an ownership change
 		os := c.arena.GetOwnedString(strangerKey)
+		c.arena.Inc(os)
 		e = newEntry()
 		c.store[os] = e
-
-		c.arena.Inc(os)
 		c.internedOwnedStrings[os] = os
 	}
 	e.add(values)
