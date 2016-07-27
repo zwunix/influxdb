@@ -182,8 +182,8 @@ func embedStrInBuf(buf []byte, s string) string {
 }
 func accessBufFromStr(os string) ([]byte, uint64) {
 	strHeader := *(*reflect.StringHeader)(unsafe.Pointer(&os))
-	sliceHeaderStart := strHeader.Data - sizeOfSliceHeader - 8
-	sliceHeader := *(*reflect.SliceHeader)(unsafe.Pointer(sliceHeaderStart))
+	sliceHeaderStart := (unsafe.Pointer)(strHeader.Data - sizeOfSliceHeader - 8)
+	sliceHeader := *(*reflect.SliceHeader)(sliceHeaderStart)
 	hashStart := strHeader.Data - 8
 	hash := *(*uint64)(unsafe.Pointer(hashStart))
 	slice := *(*[]byte)(unsafe.Pointer(&sliceHeader))
