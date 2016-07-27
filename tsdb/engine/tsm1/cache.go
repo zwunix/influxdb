@@ -30,7 +30,34 @@ type entry struct {
 
 // newEntry returns a new instance of entry.
 func newEntry() *entry {
-	return &entry{}
+	return globalEntryBatch.Get()
+	//return &entry{}
+}
+type entryBatch struct {
+	mu *sync.Mutex
+	backing []entry
+	pos int64
+}
+
+var entrymax int64 = 1e7
+var globalEntryBatch = entryBatch {
+	mu: &sync.Mutex{},
+	backing: make([]entry, entrymax),
+	pos: 0,
+}
+
+func (eb *entryBatch) Get() *entry {
+	eb.mu.Lock()
+	if eb.pos == ivbmax {
+		eb.pos = 0
+		eb.backing = nil // abandon it for the GC
+		eb.backing = make([]entry, entrymax)
+	}
+	ret := &eb.backing[eb.pos]
+	eb.pos++
+	eb.mu.Unlock()
+	return ret
+
 }
 
 // add adds the given values to the entry.
@@ -166,7 +193,7 @@ func NewCache(maxSize uint64, path string) *Cache {
 }
 
 func reclaimStore(cla *CacheLocalArena, m0 map[OwnedString]*entry, m1 map[OwnedString]OwnedString) {
-	println("DESTROYING STORE")
+	println("RECLAIMING STORE")
 	for os := range m0 {
 		delete(m0, os)
 		delete(m1, os)
@@ -301,7 +328,7 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	snapshotSize := c.size // record the number of bytes written into a snapshot
 
 	// Reset the cache
-	println("DESTROY STORE FROM SNAPSHOT")
+	println("RECLAIMING STORE FROM SNAPSHOT")
 	oldM0 := c.store
 	oldM1 := c.internedOwnedStrings
 	oldArena := c.arena
@@ -348,7 +375,7 @@ func (c *Cache) ClearSnapshot(success bool) {
 		oldM0 := old.store
 		oldM1 := old.internedOwnedStrings
 		oldArena := old.arena
-		println("DESTROY STORE FROM CLEARSNAPSHOT")
+		println("RECLAIMING STORE FROM CLEARSNAPSHOT")
 		go reclaimStore(oldArena, oldM0, oldM1)
 
 

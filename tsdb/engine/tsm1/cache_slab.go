@@ -89,7 +89,6 @@ func NewCacheLocalArena() *CacheLocalArena {
 		}
 	}(cla)
 	return cla
-		return cla
 }
 
 type CacheLocalArena struct {
