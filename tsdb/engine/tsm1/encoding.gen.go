@@ -54,7 +54,7 @@ func (a Values) assertOrdered() {
 	}
 }
 
-var deduplicateMapPool = &sync.Pool {
+var deduplicateMapPool = &sync.Pool{
 	New: func() interface{} {
 		return make(map[int64]Value)
 	},
