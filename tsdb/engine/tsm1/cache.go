@@ -165,17 +165,18 @@ func NewCache(maxSize uint64, path string) *Cache {
 	return c
 }
 
-func (c *Cache) destroyStore() {
-	for os := range c.store {
-		delete(c.store, os)
-		delete(c.internedOwnedStrings, os)
-		c.arena.Dec(os, 1)
+func reclaimStore(cla *CacheLocalArena, m0 map[OwnedString]*entry, m1 map[OwnedString]OwnedString) {
+	println("DESTROYING STORE")
+	for os := range m0 {
+		delete(m0, os)
+		delete(m1, os)
+		cla.Dec(os, 1)
 	}
-	if len(c.store) != 0 {
-		panic("nonempty c.store on destroyStore")
+	if len(m0) != 0 {
+		panic("nonempty m0 on reclaimStore")
 	}
-	if len(c.internedOwnedStrings) != 0 {
-		panic("nonempty c.internedOwnedStrings on destroyStore")
+	if len(m1) != 0 {
+		panic("nonempty m1 on reclaimStore")
 	}
 }
 
@@ -300,7 +301,14 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	snapshotSize := c.size // record the number of bytes written into a snapshot
 
 	// Reset the cache
-	c.destroyStore()
+	println("DESTROY STORE FROM SNAPSHOT")
+	oldM0 := c.store
+	oldM1 := c.internedOwnedStrings
+	oldArena := c.arena
+	c.store = make(map[OwnedString]*entry, len(oldM0))
+	c.internedOwnedStrings = make(map[OwnedString]OwnedString, len(oldM1))
+	go reclaimStore(oldArena, oldM0, oldM1)
+
 	c.size = 0
 	c.lastSnapshot = time.Now()
 
@@ -332,9 +340,18 @@ func (c *Cache) ClearSnapshot(success bool) {
 	if success {
 		c.snapshotAttempts = 0
 		c.snapshotSize = 0
+		old := c.snapshot
 		c.snapshot = nil
 
 		c.updateSnapshots()
+
+		oldM0 := old.store
+		oldM1 := old.internedOwnedStrings
+		oldArena := old.arena
+		println("DESTROY STORE FROM CLEARSNAPSHOT")
+		go reclaimStore(oldArena, oldM0, oldM1)
+
+
 	}
 }
 
