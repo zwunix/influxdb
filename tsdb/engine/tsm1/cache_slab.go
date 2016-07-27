@@ -42,9 +42,10 @@ func verboseMalloc(x int) []byte {
 	return make([]byte, x)
 }
 
+const NSHARDS = 4
 func NewCacheLocalArena() *CacheLocalArena {
-	arenas := make([]*slab.Arena, 32)
-	mus := make([]*sync.Mutex, 32)
+	arenas := make([]*slab.Arena, NSHARDS)
+	mus := make([]*sync.Mutex, NSHARDS)
 	for i := range arenas {
 		j := i
 		f := func(l int) []byte {
@@ -74,7 +75,7 @@ func (s *CacheLocalArena) get(arenaId, l int) []byte {
 	return buf
 }
 func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
-	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(32))
+	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(NSHARDS))
 
 	buf := s.get(arenaId, int(sizeOfSliceHeader) + len(src) + 8)
 	x := embedStrInBuf(buf, src)
@@ -89,7 +90,7 @@ func (s *CacheLocalArena) Inc(os OwnedString) {
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf, hash := accessBufFromStr(strCast)
 
-	arenaId := hash % uint64(32)
+	arenaId := hash % uint64(NSHARDS)
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
 
@@ -102,7 +103,7 @@ func (s *CacheLocalArena) Dec(os OwnedString) {
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf, hash := accessBufFromStr(strCast)
 
-	arenaId := hash % uint64(32)
+	arenaId := hash % uint64(NSHARDS)
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
 
@@ -115,15 +116,15 @@ func (s *CacheLocalArena) DecMulti(os OwnedString, n int) {
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf, hash := accessBufFromStr(strCast)
 
-	arenaId := hash % uint64(32)
+	arenaId := hash % uint64(NSHARDS)
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
 
-	mu.Lock()
 	for i := 0; i < n; i++ {
+		mu.Lock()
 		arena.DecRef(embeddedBuf)
+		mu.Unlock()
 	}
-	mu.Unlock()
 }
 
 func embedStrInBuf(buf []byte, s string) string {
@@ -176,6 +177,7 @@ const (
 // adapted from bigcache
 // Sum64 gets the string and returns its uint64 hash value.
 func FNV64a_Sum64(key []byte) uint64 {
+	return 0
 	var hash uint64 = offset64
 	i := 0
 	// this speedup may break FNV1a hash properties
