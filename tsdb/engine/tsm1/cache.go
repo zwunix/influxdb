@@ -169,7 +169,7 @@ func (c *Cache) destroyStore() {
 	for os := range c.store {
 		delete(c.store, os)
 		delete(c.internedOwnedStrings, os)
-		c.arena.DecMulti(os, 2)
+		c.arena.Dec(os, 1)
 	}
 	if len(c.store) != 0 {
 		panic("nonempty c.store on destroyStore")
@@ -286,8 +286,7 @@ func (c *Cache) Snapshot() (*Cache, error) {
 		if _, ok := c.snapshot.store[os]; ok {
 			c.snapshot.store[os].add(e.values)
 		} else {
-			c.snapshot.arena.Inc(os)
-			c.snapshot.arena.Inc(os)
+			c.snapshot.arena.Inc(os, 1)
 			c.snapshot.store[os] = e
 			c.snapshot.internedOwnedStrings[os] = os
 		}
@@ -405,7 +404,7 @@ func (c *Cache) DeleteRange(strangerKeys []string, min, max int64) {
 			c.size -= uint64(origSize)
 			delete(c.store, os)
 			delete(c.internedOwnedStrings, os)
-			c.arena.DecMulti(os, 2)
+			c.arena.Dec(os, 1)
 			continue
 		}
 
@@ -413,7 +412,7 @@ func (c *Cache) DeleteRange(strangerKeys []string, min, max int64) {
 		if e.count() == 0 {
 			delete(c.store, os)
 			delete(c.internedOwnedStrings, os)
-			c.arena.DecMulti(os, 2)
+			c.arena.Dec(os, 1)
 
 			c.size -= uint64(origSize)
 			continue
@@ -551,7 +550,6 @@ func (c *Cache) write(strangerKey string, values []Value) {
 	if !ok {
 		// this is an ownership change
 		os := c.arena.GetOwnedString(strangerKey)
-		c.arena.Inc(os)
 		e = newEntry()
 		c.store[os] = e
 		c.internedOwnedStrings[os] = os
@@ -578,7 +576,6 @@ func (c *Cache) entry(strangerKey string) *entry {
 	if !ok {
 		// this is an ownership change
 		os := c.arena.GetOwnedString(strangerKey)
-		c.arena.Inc(os)
 		e = newEntry()
 		c.store[os] = e
 		c.internedOwnedStrings[os] = os

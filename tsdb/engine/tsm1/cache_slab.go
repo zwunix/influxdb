@@ -1,9 +1,11 @@
 package tsm1
 
 import (
-	//"fmt"
+	"fmt"
 	"reflect"
+	"sort"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/couchbase/go-slab" // slab
@@ -55,10 +57,39 @@ func NewCacheLocalArena() *CacheLocalArena {
 		arenas[i] = slab.NewArena(32, 64*1024*1024, 2, f)
 		mus[i] = &sync.Mutex{}
 	}
-	return &CacheLocalArena{
+	cla := &CacheLocalArena{
 		arenas: arenas,
 		mus: mus,
 	}
+
+	go func(cla *CacheLocalArena) {
+		for {
+			<-time.After(5*time.Second)
+			for i := range cla.mus {
+				stats := map[string]int64{}
+				cla.mus[i].Lock()
+				cla.arenas[i].Stats(stats)
+				cla.mus[i].Unlock()
+				if stats["totAllocs"] > 0 {
+					keys := []string{}
+					for key := range stats {
+						keys = append(keys, key)
+					}
+					sort.Strings(keys)
+					s := fmt.Sprintf("%d: ", i)
+					for i, key := range keys {
+						s += fmt.Sprintf("%v: %v", key, stats[key])
+						if i + 1 < len(keys) {
+							s += ", "
+						}
+					}
+					fmt.Println(s)
+				}
+			}
+		}
+	}(cla)
+	return cla
+		return cla
 }
 
 type CacheLocalArena struct {
@@ -86,7 +117,7 @@ func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	//s.Dec(os) // sanity check
 	return os
 }
-func (s *CacheLocalArena) Inc(os OwnedString) {
+func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf, hash := accessBufFromStr(strCast)
 
@@ -95,36 +126,31 @@ func (s *CacheLocalArena) Inc(os OwnedString) {
 	mu := s.mus[arenaId]
 
 
-	mu.Lock()
-	arena.AddRef(embeddedBuf)
-	mu.Unlock()
-}
-func (s *CacheLocalArena) Dec(os OwnedString) {
-	strCast := *(*string)(unsafe.Pointer(&os))
-	embeddedBuf, hash := accessBufFromStr(strCast)
-
-	arenaId := hash % uint64(NSHARDS)
-	arena := s.arenas[arenaId]
-	mu := s.mus[arenaId]
-
-	mu.Lock()
-	arena.DecRef(embeddedBuf)
-	mu.Unlock()
-}
-
-func (s *CacheLocalArena) DecMulti(os OwnedString, n int) {
-	strCast := *(*string)(unsafe.Pointer(&os))
-	embeddedBuf, hash := accessBufFromStr(strCast)
-
-	arenaId := hash % uint64(NSHARDS)
-	arena := s.arenas[arenaId]
-	mu := s.mus[arenaId]
-
-	for i := 0; i < n; i++ {
 		mu.Lock()
-		arena.DecRef(embeddedBuf)
-		mu.Unlock()
+	for i := 0; i < n; i++ {
+		arena.AddRef(embeddedBuf)
 	}
+		mu.Unlock()
+}
+func (s *CacheLocalArena) DecOnce(os OwnedString) bool {
+	return s.Dec(os, 1)
+}
+
+func (s *CacheLocalArena) Dec(os OwnedString, n int) bool {
+	strCast := *(*string)(unsafe.Pointer(&os))
+	embeddedBuf, hash := accessBufFromStr(strCast)
+
+	arenaId := hash % uint64(NSHARDS)
+	arena := s.arenas[arenaId]
+	mu := s.mus[arenaId]
+
+	var ret bool
+	mu.Lock()
+	for i := 0; i < n; i++ {
+		ret = arena.DecRef(embeddedBuf)
+	}
+	mu.Unlock()
+	return ret
 }
 
 func embedStrInBuf(buf []byte, s string) string {
