@@ -4,6 +4,7 @@ package models
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -114,10 +115,23 @@ func init() {
 }
 
 func byteSliceToString(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
+	sliceHeader := *(*reflect.SliceHeader)(unsafe.Pointer(&b))
+	stringHeader := reflect.StringHeader{
+		Data: sliceHeader.Data,
+		Len: sliceHeader.Len,
+	}
+	str := *(*string)(unsafe.Pointer(&stringHeader))
+	return str
 }
 func stringToByteSlice(s string) []byte {
-	return *(*[]byte)(unsafe.Pointer(&s))
+	stringHeader := *(*reflect.StringHeader)(unsafe.Pointer(&s))
+	sliceHeader := reflect.SliceHeader{
+		Data: stringHeader.Data,
+		Len: stringHeader.Len,
+		Cap: stringHeader.Len,
+	}
+	buf := *(*[]byte)(unsafe.Pointer(&sliceHeader))
+	return buf
 }
 
 func bucketPos(l int) int {
