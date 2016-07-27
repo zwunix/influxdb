@@ -118,7 +118,7 @@ func byteSliceToString(b []byte) string {
 	sliceHeader := *(*reflect.SliceHeader)(unsafe.Pointer(&b))
 	stringHeader := reflect.StringHeader{
 		Data: sliceHeader.Data,
-		Len: sliceHeader.Len,
+		Len:  sliceHeader.Len,
 	}
 	str := *(*string)(unsafe.Pointer(&stringHeader))
 	return str
@@ -127,8 +127,8 @@ func stringToByteSlice(s string) []byte {
 	stringHeader := *(*reflect.StringHeader)(unsafe.Pointer(&s))
 	sliceHeader := reflect.SliceHeader{
 		Data: stringHeader.Data,
-		Len: stringHeader.Len,
-		Cap: stringHeader.Len,
+		Len:  stringHeader.Len,
+		Cap:  stringHeader.Len,
 	}
 	buf := *(*[]byte)(unsafe.Pointer(&sliceHeader))
 	return buf

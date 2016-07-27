@@ -38,16 +38,16 @@ type Value interface {
 }
 
 type integerValueBatch struct {
-	mu *sync.Mutex
+	mu      *sync.Mutex
 	backing []IntegerValue
-	pos int64
+	pos     int64
 }
 
 var ivbmax int64 = 1e7
-var globalIntegerValueBatch = integerValueBatch {
-	mu: &sync.Mutex{},
+var globalIntegerValueBatch = integerValueBatch{
+	mu:      &sync.Mutex{},
 	backing: make([]IntegerValue, ivbmax),
-	pos: 0,
+	pos:     0,
 }
 
 func (ivb *integerValueBatch) Get() *IntegerValue {
@@ -63,17 +63,18 @@ func (ivb *integerValueBatch) Get() *IntegerValue {
 	return ret
 
 }
+
 type floatValueBatch struct {
-	mu *sync.Mutex
+	mu      *sync.Mutex
 	backing []FloatValue
-	pos int64
+	pos     int64
 }
 
 var fvbmax int64 = 1e7
-var globalFloatValueBatch = floatValueBatch {
-	mu: &sync.Mutex{},
+var globalFloatValueBatch = floatValueBatch{
+	mu:      &sync.Mutex{},
 	backing: make([]FloatValue, fvbmax),
-	pos: 0,
+	pos:     0,
 }
 
 func (fvb *floatValueBatch) Get() *FloatValue {
