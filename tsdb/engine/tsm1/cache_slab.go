@@ -44,11 +44,12 @@ func verboseMalloc(x int) []byte {
 	return make([]byte, x)
 }
 
-var NSHARDS = 1
+var NSHARDS = 4
 
 func NewCacheLocalArena() *CacheLocalArena {
 	arenas := make([]*slab.Arena, NSHARDS)
 	mus := make([]*sync.Mutex, NSHARDS)
+	queues := make([]chan CLAJob, NSHARDS)
 	for i := range arenas {
 		j := i
 		f := func(l int) []byte {
@@ -57,10 +58,21 @@ func NewCacheLocalArena() *CacheLocalArena {
 		}
 		arenas[i] = slab.NewArena(1, 1*1024*1024, 2, f)
 		mus[i] = &sync.Mutex{}
+		queues[i] = make(chan CLAJob, 1000)
 	}
 	cla := &CacheLocalArena{
 		arenas: arenas,
 		mus:    mus,
+		queues: queues,
+	}
+
+	for i := range arenas {
+		go func(i int) {
+			queue := queues[i]
+			for j := range queue {
+				j.Do()
+			}
+		}(i)
 	}
 
 	go func(cla *CacheLocalArena) {
@@ -97,6 +109,7 @@ func NewCacheLocalArena() *CacheLocalArena {
 type CacheLocalArena struct {
 	mus    []*sync.Mutex
 	arenas []*slab.Arena
+	queues []chan CLAJob
 }
 
 func (s *CacheLocalArena) get(arenaId, l int) []byte {
@@ -143,14 +156,21 @@ func (s *CacheLocalArena) Dec(os OwnedString, n int) bool {
 	arenaId := hash % uint64(NSHARDS)
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
+	ret := make(chan bool, 1)
 
-	var ret bool
-	mu.Lock()
-	for i := 0; i < n; i++ {
-		ret = arena.DecRef(embeddedBuf)
+	do := func() {
+		var zeroed bool
+		mu.Lock()
+		for i := 0; i < n; i++ {
+			zeroed = arena.DecRef(embeddedBuf)
+		}
+		mu.Unlock()
+		ret <- zeroed
 	}
-	mu.Unlock()
-	return ret
+
+	s.queues[i] <- do
+
+	return <-ret
 }
 
 func embedStrInBuf(buf []byte, s string) string {
@@ -219,4 +239,8 @@ func FNV64a_Sum64(key []byte) uint64 {
 	}
 
 	return hash
+}
+
+type CLAJob interface{
+	Do()
 }
