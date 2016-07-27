@@ -16,15 +16,6 @@ var sizeOfStringHeader = unsafe.Sizeof(reflect.StringHeader{})
 
 type OwnedString string
 
-func (os OwnedString) CopyFromString(src string) {
-	dst := ownedStringToByteSlice(os)
-	copy(dst, src)
-}
-func (os OwnedString) CopyFromBytes(src []byte) {
-	dst := ownedStringToByteSlice(os)
-	copy(dst, src)
-}
-
 func verboseMalloc(x int) []byte {
 	println("go malloc", x)
 	return make([]byte, x)
@@ -58,10 +49,6 @@ func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	return os
 }
 func (s *CacheLocalArena) Inc(os OwnedString) {
-	// this is only valid because a StringHeader is a prefix of a
-	// SliceHeader.
-	//bufheader := *(*reflect.SliceHeader)(unsafe.Pointer(uintptr(unsafe.Pointer(&x)) - uintptr(sizeOfStringHeader)))
-	//println(bufheader.Data, bufheader.Len, bufheader.Cap)
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf := accessBufFromStr(strCast)
 
@@ -70,26 +57,12 @@ func (s *CacheLocalArena) Inc(os OwnedString) {
 	s.mu.Unlock()
 }
 func (s *CacheLocalArena) Dec(os OwnedString) {
-	return
-	// this is only valid because a StringHeader is a prefix of a
-	// SliceHeader.
-	//strheader := *(*StringHeader)(unsafe.Pointer(&x))
-	strStart := uintptr(unsafe.Pointer(&os))
-	bufheader := *(*reflect.SliceHeader)(unsafe.Pointer(strStart - uintptr(sizeOfSliceHeader)))
-	buf := *(*[]byte)(unsafe.Pointer(&bufheader))
-	s.mu.Lock()
-	s.arena.DecRef(buf)
-	s.mu.Unlock()
-}
+	strCast := *(*string)(unsafe.Pointer(&os))
+	embeddedBuf := accessBufFromStr(strCast)
 
-// preserve the magic 'cap' data used by the slab allocator
-func ownedStringToByteSlice(s OwnedString) []byte {
-	panic("unused")
-	return nil
-	//start := uintptr(unsafe.Pointer(&s)) - sizeOfStringHeader
-	//buf := *(*[]byte)(unsafe.Pointer(start))
-	//return buf
-	//return *(*[]byte)(unsafe.Pointer(&osHeaderBytesWithCap))
+	s.mu.Lock()
+	s.arena.DecRef(embeddedBuf)
+	s.mu.Unlock()
 }
 
 func embedStrInBuf(buf []byte, s string) string {
