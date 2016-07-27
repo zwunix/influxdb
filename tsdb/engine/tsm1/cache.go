@@ -168,9 +168,8 @@ func NewCache(maxSize uint64, path string) *Cache {
 func (c *Cache) destroyStore() {
 	for _, os := range c.internedOwnedStrings {
 		delete(c.internedOwnedStrings, os)
-		c.arena.Dec(os)
 		delete(c.store, os)
-		c.arena.Dec(os)
+		c.arena.DecMulti(os, 2)
 	}
 	if len(c.store) != 0 {
 		panic("nonempty c.store on destroyStore")

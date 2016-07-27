@@ -46,7 +46,12 @@ func NewCacheLocalArena() *CacheLocalArena {
 	arenas := make([]*slab.Arena, 32)
 	mus := make([]*sync.Mutex, 32)
 	for i := range arenas {
-		arenas[i] = slab.NewArena(1, 4*1024*1024, 2, verboseMalloc)
+		j := i
+		f := func(l int) []byte {
+			println("go malloc", j, l)
+			return make([]byte, l)
+		}
+		arenas[i] = slab.NewArena(1, 32*1024*1024, 2, f)
 		mus[i] = &sync.Mutex{}
 	}
 	return &CacheLocalArena{
@@ -102,6 +107,21 @@ func (s *CacheLocalArena) Dec(os OwnedString) {
 
 	mu.Lock()
 	arena.DecRef(embeddedBuf)
+	mu.Unlock()
+}
+
+func (s *CacheLocalArena) DecMulti(os OwnedString, n int) {
+	arenaId := int(FNV64a_Sum64(os.ViewAsBytes()) % uint64(32))
+	arena := s.arenas[arenaId]
+	mu := s.mus[arenaId]
+
+	strCast := *(*string)(unsafe.Pointer(&os))
+	embeddedBuf := accessBufFromStr(strCast)
+
+	mu.Lock()
+	for i := 0; i < n; i++ {
+		arena.DecRef(embeddedBuf)
+	}
 	mu.Unlock()
 }
 
