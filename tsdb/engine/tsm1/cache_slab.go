@@ -52,7 +52,7 @@ func NewCacheLocalArena() *CacheLocalArena {
 			println("go malloc", j, l)
 			return make([]byte, l)
 		}
-		arenas[i] = slab.NewArena(1, 4*1024*1024, 2, f)
+		arenas[i] = slab.NewArena(32, 64*1024*1024, 2, f)
 		mus[i] = &sync.Mutex{}
 	}
 	return &CacheLocalArena{

@@ -166,7 +166,7 @@ func NewCache(maxSize uint64, path string) *Cache {
 }
 
 func (c *Cache) destroyStore() {
-	for _, os := range c.internedOwnedStrings {
+	for os := range c.internedOwnedStrings {
 		delete(c.internedOwnedStrings, os)
 		delete(c.store, os)
 		c.arena.DecMulti(os, 2)
@@ -281,7 +281,7 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	}
 
 	// Append the current cache values to the snapshot
-	for _, os := range c.internedOwnedStrings {
+	for os := range c.internedOwnedStrings {
 		e := c.store[os]
 		e.mu.RLock()
 		if _, ok := c.snapshot.store[os]; ok {
@@ -362,7 +362,7 @@ func (c *Cache) Keys() []string {
 	// we have to heap allocate new strings so that downstream consumers
 	// have expected behavior
 	buf := []byte{}
-	for _, os := range c.internedOwnedStrings {
+	for os := range c.internedOwnedStrings {
 		buf = buf[:0]
 		buf = append(buf, os...)
 		heapString := string(buf)
@@ -406,8 +406,7 @@ func (c *Cache) DeleteRange(strangerKeys []string, min, max int64) {
 			c.size -= uint64(origSize)
 			delete(c.store, os)
 			delete(c.internedOwnedStrings, os)
-			c.arena.Dec(os)
-			c.arena.Dec(os)
+			c.arena.DecMulti(os, 2)
 			continue
 		}
 
@@ -415,8 +414,7 @@ func (c *Cache) DeleteRange(strangerKeys []string, min, max int64) {
 		if e.count() == 0 {
 			delete(c.store, os)
 			delete(c.internedOwnedStrings, os)
-			c.arena.Dec(os)
-			c.arena.Dec(os)
+			c.arena.DecMulti(os, 2)
 
 			c.size -= uint64(origSize)
 			continue
@@ -505,7 +503,7 @@ func (c *Cache) KeysAndTypes() ([]string, []DataTypeResult) {
 	dtrs := make([]DataTypeResult, len(c.store))
 	buf := []byte{}
 	i := 0
-	for _, os := range c.internedOwnedStrings {
+	for os := range c.internedOwnedStrings {
 		e := c.store[os]
 		buf = buf[:0]
 		buf = append(buf, os...)
