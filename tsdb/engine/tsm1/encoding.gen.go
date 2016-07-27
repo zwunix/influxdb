@@ -9,6 +9,7 @@ package tsm1
 import (
 	"fmt"
 	"sort"
+	"sync"
 )
 
 // Values represents a slice of  values.
@@ -53,10 +54,16 @@ func (a Values) assertOrdered() {
 	}
 }
 
+var deduplicateMapPool = &sync.Pool {
+	New: func() interface{} {
+		return make(map[int64]Value)
+	},
+}
+
 // Deduplicate returns a new slice with any values that have the same timestamp removed.
 // The Value that appears last in the slice is the one that is kept.
 func (a Values) Deduplicate() Values {
-	m := make(map[int64]Value)
+	m := deduplicateMapPool.Get().(map[int64]Value)
 	for _, val := range a {
 		m[val.UnixNano()] = val
 	}
@@ -65,6 +72,11 @@ func (a Values) Deduplicate() Values {
 	for _, val := range m {
 		other = append(other, val)
 	}
+
+	for k := range m {
+		delete(m, k)
+	}
+	deduplicateMapPool.Put(m)
 
 	sort.Sort(other)
 	return other

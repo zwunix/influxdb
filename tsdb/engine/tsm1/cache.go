@@ -196,16 +196,16 @@ func NewCache(maxSize uint64, path string) *Cache {
 func reclaimStore(cla *CacheLocalArena, m0 map[OwnedString]*entry, m1 map[OwnedString]OwnedString) {
 	println("RECLAIMING STORE")
 	for os := range m0 {
-		delete(m0, os)
-		delete(m1, os)
+		//delete(m0, os)
+		//delete(m1, os)
 		cla.Dec(os, 1)
 	}
-	if len(m0) != 0 {
-		panic("nonempty m0 on reclaimStore")
-	}
-	if len(m1) != 0 {
-		panic("nonempty m1 on reclaimStore")
-	}
+	//if len(m0) != 0 {
+	//	panic("nonempty m0 on reclaimStore")
+	//}
+	//if len(m1) != 0 {
+	//	panic("nonempty m1 on reclaimStore")
+	//}
 }
 
 // CacheStatistics hold statistics related to the cache.
