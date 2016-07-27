@@ -166,9 +166,9 @@ func NewCache(maxSize uint64, path string) *Cache {
 }
 
 func (c *Cache) destroyStore() {
-	for os := range c.internedOwnedStrings {
-		delete(c.internedOwnedStrings, os)
+	for os := range c.store {
 		delete(c.store, os)
+		delete(c.internedOwnedStrings, os)
 		c.arena.DecMulti(os, 2)
 	}
 	if len(c.store) != 0 {
@@ -281,14 +281,13 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	}
 
 	// Append the current cache values to the snapshot
-	for os := range c.internedOwnedStrings {
-		e := c.store[os]
+	for os, e := range c.store {
 		e.mu.RLock()
 		if _, ok := c.snapshot.store[os]; ok {
 			c.snapshot.store[os].add(e.values)
 		} else {
-			c.arena.Inc(os)
-			c.arena.Inc(os)
+			c.snapshot.arena.Inc(os)
+			c.snapshot.arena.Inc(os)
 			c.snapshot.store[os] = e
 			c.snapshot.internedOwnedStrings[os] = os
 		}
@@ -503,8 +502,7 @@ func (c *Cache) KeysAndTypes() ([]string, []DataTypeResult) {
 	dtrs := make([]DataTypeResult, len(c.store))
 	buf := []byte{}
 	i := 0
-	for os := range c.internedOwnedStrings {
-		e := c.store[os]
+	for os, e := range c.store {
 		buf = buf[:0]
 		buf = append(buf, os...)
 		heapString := string(buf)
