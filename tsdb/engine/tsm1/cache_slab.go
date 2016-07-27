@@ -16,30 +16,52 @@ var sizeOfStringHeader = unsafe.Sizeof(reflect.StringHeader{})
 
 type OwnedString string
 
+func (os OwnedString) ViewAsBytes() []byte {
+	osHeader := *(*reflect.StringHeader)(unsafe.Pointer(&os))
+	sliceHeader := reflect.SliceHeader{
+		Data: osHeader.Data,
+		Len: osHeader.Len,
+		Cap: osHeader.Len,
+	}
+	bufHeader := *(*[]byte)(unsafe.Pointer(&sliceHeader))
+	return bufHeader
+}
+
 func verboseMalloc(x int) []byte {
 	println("go malloc", x)
 	return make([]byte, x)
 }
 
 func NewCacheLocalArena() *CacheLocalArena {
+	arenas := make([]*slab.Arena, 32)
+	mus := make([]*sync.Mutex, 32)
+	for i := range arenas {
+		arenas[i] = slab.NewArena(1, 4*1024*1024, 2, verboseMalloc)
+		mus[i] = &sync.Mutex{}
+	}
 	return &CacheLocalArena{
-		arena: slab.NewArena(1, 64*1024*1024, 2, verboseMalloc),
+		arenas: arenas,
+		mus: mus,
 	}
 }
 
 type CacheLocalArena struct {
-	mu    sync.Mutex
-	arena *slab.Arena
+	mus    []*sync.Mutex
+	arenas []*slab.Arena
 }
 
-func (s *CacheLocalArena) get(l int) []byte {
-	s.mu.Lock()
-	buf := s.arena.Alloc(l)
-	s.mu.Unlock()
+func (s *CacheLocalArena) get(arenaId, l int) []byte {
+	arena := s.arenas[arenaId]
+	mu := s.mus[arenaId]
+	mu.Lock()
+	buf := arena.Alloc(l)
+	mu.Unlock()
 	return buf
 }
 func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
-	buf := s.get(int(sizeOfSliceHeader) + len(src))
+	arenaId := int(FNV64a_Sum64([]byte(src)) % uint64(32))
+
+	buf := s.get(arenaId, int(sizeOfSliceHeader) + len(src))
 	x := embedStrInBuf(buf, src)
 	os := *(*OwnedString)(unsafe.Pointer(&x))
 
@@ -49,20 +71,28 @@ func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	return os
 }
 func (s *CacheLocalArena) Inc(os OwnedString) {
+	arenaId := int(FNV64a_Sum64(os.ViewAsBytes()) % uint64(32))
+	arena := s.arenas[arenaId]
+	mu := s.mus[arenaId]
+
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf := accessBufFromStr(strCast)
 
-	s.mu.Lock()
-	s.arena.AddRef(embeddedBuf)
-	s.mu.Unlock()
+	mu.Lock()
+	arena.AddRef(embeddedBuf)
+	mu.Unlock()
 }
 func (s *CacheLocalArena) Dec(os OwnedString) {
+	arenaId := int(FNV64a_Sum64(os.ViewAsBytes()) % uint64(32))
+	arena := s.arenas[arenaId]
+	mu := s.mus[arenaId]
+
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf := accessBufFromStr(strCast)
 
-	s.mu.Lock()
-	s.arena.DecRef(embeddedBuf)
-	s.mu.Unlock()
+	mu.Lock()
+	arena.DecRef(embeddedBuf)
+	mu.Unlock()
 }
 
 func embedStrInBuf(buf []byte, s string) string {
@@ -94,4 +124,32 @@ func accessBufFromStr(os string) []byte {
 	sliceHeader := *(*reflect.SliceHeader)(unsafe.Pointer(sliceHeaderStart))
 	slice := *(*[]byte)(unsafe.Pointer(&sliceHeader))
 	return slice
+}
+// hashing/buckets
+const (
+	// taken from bigcache
+	// offset64 FNVa offset basis. See https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function#FNV-1a_hash
+	offset64 = 14695981039346656037
+
+	// taken from bigcache
+	// prime64 FNVa prime value. See https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function#FNV-1a_hash
+	prime64 = 1099511628211
+)
+// adapted from bigcache
+// Sum64 gets the string and returns its uint64 hash value.
+func FNV64a_Sum64(key []byte) uint64 {
+	var hash uint64 = offset64
+	i := 0
+	// this speedup may break FNV1a hash properties
+	for i+8 <= len(key) {
+		hash ^= *(*uint64)(unsafe.Pointer(&key[i]))
+		hash *= prime64
+		i += 8
+	}
+	for ; i < len(key); i++ {
+		hash ^= uint64(key[i])
+		hash *= prime64
+	}
+
+	return hash
 }
