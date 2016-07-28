@@ -1,7 +1,6 @@
 package tsm1
 
 import (
-	"fmt"
 	"reflect"
 	//"os"
 	//"strconv"
@@ -22,7 +21,7 @@ type ByteSliceSlabPool struct {
 
 func NewByteSliceSlabPool() *ByteSliceSlabPool {
 	return &ByteSliceSlabPool{
-		arena: slab.NewArena(1, 1024, 2, nil),
+		arena: slab.NewArena(1, 16*1024*1024, 2, nil),
 		Mutex: sync.Mutex{},
 		refs:  0,
 	}
@@ -82,8 +81,6 @@ func (p *StringSlabPool) Get(l int) (string, []byte) {
 	metadata.Len = danglingMetadata.Len
 	metadata.Cap = danglingMetadata.Cap
 
-	fmt.Printf("Alloc metadata: %v\n", metadata)
-
 	publicStr := reflect.StringHeader{
 		Data: metadata.Data + sizeOfSliceHeader,
 		Len: l,
@@ -103,17 +100,7 @@ func (p *StringSlabPool) Get(l int) (string, []byte) {
 func (p *StringSlabPool) Inc(s string) {
 	publicMetadata := *(*reflect.StringHeader)(unsafe.Pointer(&s))
 
-	// find the metadata
-	// this step is needed to satisfy `go vet`
-	//metadataPtrHeader := reflect.SliceHeader{
-	//	Data: publicMetadata.Data - uintptr(sizeOfSliceHeader),
-	//	Len: sizeOfSliceHeader,
-	//	Cap: sizeOfSliceHeader,
-	//}
-	//metadataPtr := *(*[]byte)(unsafe.Pointer(&metadataPtrHeader))
-	//metadata := *(*reflect.SliceHeader)(unsafe.Pointer(&metadataPtr))
 	metadata := *(*reflect.SliceHeader)(unsafe.Pointer(publicMetadata.Data - uintptr(sizeOfSliceHeader)))
-	fmt.Printf("Inc metadata: %v\n", metadata)
 
 	metadataBuf := *(*[]byte)(unsafe.Pointer(&metadata))
 
@@ -122,16 +109,7 @@ func (p *StringSlabPool) Inc(s string) {
 func (p *StringSlabPool) Dec(s string) bool {
 	publicMetadata := *(*reflect.StringHeader)(unsafe.Pointer(&s))
 
-	// find the metadata
-	// this step is needed to satisfy `go vet`
-	//metadataPtrHeader := reflect.SliceHeader{
-	//	Data: publicMetadata.Data - uintptr(sizeOfSliceHeader),
-	//	Len: sizeOfSliceHeader,
-	//	Cap: sizeOfSliceHeader,
-	//}
-	//metadataPtr := *(*[]byte)(unsafe.Pointer(&metadataPtrHeader))
 	metadata := *(*reflect.SliceHeader)(unsafe.Pointer(publicMetadata.Data - uintptr(sizeOfSliceHeader)))
-	fmt.Printf("Dec metadata: %v\n", metadata)
 
 	metadataBuf := *(*[]byte)(unsafe.Pointer(&metadata))
 
