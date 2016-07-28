@@ -3,7 +3,8 @@ package tsm1
 import (
 	"fmt"
 	"reflect"
-	//"os"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 	"unsafe"
@@ -44,7 +45,18 @@ func verboseMalloc(x int) []byte {
 	return make([]byte, x)
 }
 
-var NSHARDS = 4
+var NSHARDS int64 = 4
+
+func init() {
+	if s := os.Getenv("CACHE_SLAB_SHARDS"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			panic(err.Error())
+		}
+		NSHARDS = int64(n)
+	}
+	println("CACHE_SLAB_SHARDS is", NSHARDS)
+}
 
 func NewCacheLocalArena() *CacheLocalArena {
 	arenas := make([]*slab.Arena, NSHARDS)
@@ -82,9 +94,9 @@ func NewCacheLocalArena() *CacheLocalArena {
 			<-time.After(5 * time.Second)
 			for i := range cla.mus {
 				stats := map[string]int64{}
-				cla.mus[i].Lock()
+				//cla.mus[i].Lock()
 				cla.arenas[i].Stats(stats)
-				cla.mus[i].Unlock()
+				//cla.mus[i].Unlock()
 				if stats["totAllocs"] > 0 {
 					fmt.Printf("%d/%d: totAllocs: %d, totAddRefs: %d, totDecRefs: %d, totDecRefZeroes: %d\n", i+1, len(cla.mus),
 						stats["totAllocs"], stats["totAddRefs"], stats["totDecRefs"], stats["totDecRefZeroes"])
@@ -131,9 +143,9 @@ type GetOwnedStringJob struct {
 }
 func (j *GetOwnedStringJob) Do() {
 		//println("trying to do GetOwnedString")
-		j.mu.Lock()
+		//j.mu.Lock()
 		buf := j.arena.Alloc(j.l)
-		j.mu.Unlock()
+		//j.mu.Unlock()
 		j.ret<-buf
 }
 var GetOwnedStringJobPool = &sync.Pool{
@@ -173,9 +185,9 @@ type IncJob struct {
 func (j *IncJob) Do() {
 	//println("trying to do GetOwnedString")
 	for ; j.n > 0; j.n-- {
-		j.mu.Lock()
+		//j.mu.Lock()
 		j.arena.AddRef(j.embeddedBuf)
-		j.mu.Unlock()
+		//j.mu.Unlock()
 	}
 	j.wg.Done()
 }
@@ -211,17 +223,17 @@ func (s *CacheLocalArena) Dec(os OwnedString, n int) bool {
 
 	arenaId := hash % uint64(NSHARDS)
 	arena := s.arenas[arenaId]
-	mu := s.mus[arenaId]
+	//mu := s.mus[arenaId]
 	ret := make(chan bool, 1)
 
 	do := func() {
 		//println("trying to do Dec")
 		var zeroed bool
-		mu.Lock()
+		//mu.Lock()
 		for i := 0; i < n; i++ {
 			zeroed = arena.DecRef(embeddedBuf)
 		}
-		mu.Unlock()
+		//mu.Unlock()
 		ret <- zeroed
 	}
 

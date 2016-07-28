@@ -172,11 +172,15 @@ type Cache struct {
 	arena *CacheLocalArena
 }
 
-var globalCacheArena = NewCacheLocalArena()
+var globalCacheArena *CacheLocalArena
+var once = sync.Once{}
 
 // NewCache returns an instance of a cache which will use a maximum of maxSize bytes of memory.
 // Only used for engine caches, never for snapshots
 func NewCache(maxSize uint64, path string) *Cache {
+	once.Do(func() {
+		globalCacheArena = NewCacheLocalArena()
+	})
 	c := &Cache{
 		maxSize:              maxSize,
 		store:                make(map[OwnedString]*entry),
