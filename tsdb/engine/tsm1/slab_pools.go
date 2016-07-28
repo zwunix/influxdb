@@ -96,7 +96,7 @@ func (p *ShardedByteSliceSlabPool) Get(l, shardId int) []byte {
 	if shardId < 0 {
 		shardId = 0
 		if p.nshards > 1 {
-			shardId = rand.Intn(p.nshards)
+			shardId = p.SmartShardID()
 		}
 	}
 

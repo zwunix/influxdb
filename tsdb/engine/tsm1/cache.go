@@ -179,8 +179,7 @@ func (c *Cache) nextID() OwnedStringID {
 	return OwnedStringID(atomic.AddInt64(&c.ownedStringIDAcc, 1))
 }
 
-var globalCacheArena *CacheLocalArena
-var once = sync.Once{}
+var globalStringSlabPool = NewStringSlabPool(16)
 
 // NewCache returns an instance of a cache which will use a maximum of maxSize bytes of memory.
 // Only used for engine caches, never for snapshots
