@@ -4,6 +4,7 @@ import (
 	"reflect"
 	//"os"
 	//"strconv"
+	"math/rand"
 	"sync"
 	//"time"
 	"unsafe"
@@ -21,7 +22,7 @@ type ByteSliceSlabPool struct {
 
 func NewByteSliceSlabPool() *ByteSliceSlabPool {
 	return &ByteSliceSlabPool{
-		arena: slab.NewArena(1, 16*1024*1024, 2, nil),
+		arena: slab.NewArena(1, 1024*1024, 2, nil),
 		Mutex: sync.Mutex{},
 		refs:  0,
 	}
@@ -56,6 +57,61 @@ func (p *ByteSliceSlabPool) Refs() int64 {
 	ret := p.refs
 	p.Unlock()
 	return ret
+}
+
+type ShardedByteSliceSlabPool struct {
+	nshards int
+	pools []*ByteSliceSlabPool
+}
+
+func NewShardedByteSliceSlabPool(nshards int) *ShardedByteSliceSlabPool {
+	pools := make([]*ByteSliceSlabPool, nshards)
+	for i := range pools {
+		pools[i] = NewByteSliceSlabPool()
+	}
+	return &ShardedByteSliceSlabPool{
+		nshards: nshards,
+		pools: pools,
+	}
+}
+
+func (p *ShardedByteSliceSlabPool) Get(l int) []byte {
+	shardId := rand.Intn(p.nshards)
+	pool := p.pools[shardId]
+
+	l2 := 8 + l
+	buf := pool.Get(l2)
+
+	danglingMetadata := *(*reflect.SliceHeader)(unsafe.Pointer(&buf))
+
+	shardIdDst := (*uint64)(unsafe.Pointer(&(buf[0])))
+	*shardIdDst = uint64(shardId)
+
+	publicBuf := reflect.SliceHeader{
+		Data: danglingMetadata.Data + 8,
+		Len: danglingMetadata.Len - 8,
+		Cap: danglingMetadata.Cap,
+	}
+
+	ret := *(*[]byte)(unsafe.Pointer(&publicBuf))
+	return ret
+}
+func (p *ShardedByteSliceSlabPool) Inc(x []byte) {
+	publicMetadataHeader := *(*reflect.SliceHeader)(unsafe.Pointer(&x))
+	privateMetadataHeader := reflect.SliceHeader{
+		Data: publicMetadataHeader.Data - 8,
+		Len: publicMetadataHeader.Len + 8,
+		Cap: publicMetadataHeader.Cap,
+	}
+
+	shardId := *(*uint64)(unsafe.Pointer(privateMetadataHeader.Data))
+	pool := p.pools[shardId]
+
+	buf := *(*[]byte)(unsafe.Pointer(&privateMetadataHeader))
+	pool.Inc(buf)
+}
+func (p *ShardedByteSliceSlabPool) Dec(x []byte) {
+	//shardId := rand.Randn(p.nshards)
 }
 
 type StringSlabPool struct {
