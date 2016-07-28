@@ -46,5 +46,14 @@ func TestByteSliceSlabPool(t *testing.T) {
 	if bufC[0] != 'z' {
 		t.Fatal("bad reuse")
 	}
+}
+
+func TestStringSlabPool(t *testing.T) {
+	p := NewStringSlabPool()
+	str, buf := p.Get(1)
+	buf[0] = 'x'
+	if str != "x" {
+		t.Fatal("bad string write")
+	}
 
 }

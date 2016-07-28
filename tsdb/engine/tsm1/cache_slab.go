@@ -14,7 +14,7 @@ import (
 
 var sizeOfuintptr = unsafe.Sizeof(uintptr(0))
 var sizeOfint = unsafe.Sizeof(uint(0))
-var sizeOfSliceHeader = unsafe.Sizeof(reflect.SliceHeader{})
+//var sizeOfSliceHeader = unsafe.Sizeof(reflect.SliceHeader{})
 var sizeOfStringHeader = unsafe.Sizeof(reflect.StringHeader{})
 
 type OwnedString string
@@ -329,7 +329,7 @@ func embedStrInBuf(buf []byte, s string) string {
 }
 func accessBufFromStr(os string) ([]byte, uint64) {
 	strHeader := *(*reflect.StringHeader)(unsafe.Pointer(&os))
-	sliceHeaderStart := strHeader.Data - sizeOfSliceHeader - 8
+	sliceHeaderStart := strHeader.Data - uintptr(sizeOfSliceHeader) - 8
 	sliceHeader := *(*reflect.SliceHeader)(unsafe.Pointer(sliceHeaderStart))
 	hashStart := strHeader.Data - 8
 	hash := *(*uint64)(unsafe.Pointer(hashStart))
