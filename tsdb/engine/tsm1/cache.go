@@ -148,11 +148,13 @@ const (
 )
 
 // Cache maintains an in-memory store of Values for a set of keys.
+type OwnedStringID int64
 type Cache struct {
 	commit               sync.Mutex
 	mu                   sync.RWMutex
-	store                map[OwnedString]*entry
-	internedOwnedStrings map[OwnedString]OwnedString
+	store                map[OwnedStringID]*entry
+	internedOwnedStrings map[OwnedString]OwnedStringID
+	internedOwnedStringsReverse map[OwnedStringID]OwnedString
 	size                 uint64
 	maxSize              uint64
 
@@ -170,6 +172,11 @@ type Cache struct {
 	lastSnapshot time.Time
 
 	arena *CacheLocalArena
+	ownedStringIDAcc int64
+}
+
+func (c *Cache) nextID() OwnedStringID {
+	return OwnedStringID(atomic.AddInt64(&c.ownedStringIDAcc, 1))
 }
 
 var globalCacheArena *CacheLocalArena
@@ -183,8 +190,9 @@ func NewCache(maxSize uint64, path string) *Cache {
 	})
 	c := &Cache{
 		maxSize:              maxSize,
-		store:                make(map[OwnedString]*entry),
-		internedOwnedStrings: make(map[OwnedString]OwnedString),
+		store:                make(map[OwnedStringID]*entry),
+		internedOwnedStrings: make(map[OwnedString]OwnedStringID),
+		internedOwnedStringsReverse: make(map[OwnedStringID]OwnedString),
 		stats:                &CacheStatistics{},
 		lastSnapshot:         time.Now(),
 		arena:                globalCacheArena,
@@ -197,7 +205,7 @@ func NewCache(maxSize uint64, path string) *Cache {
 	return c
 }
 
-func reclaimStore(cla *CacheLocalArena, m0 map[OwnedString]*entry, m1 map[OwnedString]OwnedString) {
+func reclaimStore(cla *CacheLocalArena, m0 map[OwnedString]OwnedStringID) {
 	start := time.Now().UnixNano()
 	println("RECLAIMING STORE")
 	for os := range m0 {
@@ -311,25 +319,30 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	// If no snapshot exists, create a new one, otherwise update the existing snapshot
 	if c.snapshot == nil {
 		c.snapshot = &Cache{
-			store:                make(map[OwnedString]*entry, len(c.store)),
-			internedOwnedStrings: make(map[OwnedString]OwnedString, len(c.internedOwnedStrings)),
+			store:                make(map[OwnedStringID]*entry, len(c.store)),
+			internedOwnedStrings: make(map[OwnedString]OwnedStringID, len(c.internedOwnedStrings)),
+			internedOwnedStringsReverse: make(map[OwnedStringID]OwnedString, len(c.internedOwnedStringsReverse)),
 			arena:                globalCacheArena,
 		}
 	}
 
 	// Append the current cache values to the snapshot
-	for os, e := range c.store {
+	for osId, e := range c.store {
+		os := c.internedOwnedStringsReverse[osId]
 		e.mu.RLock()
-		if _, ok := c.snapshot.store[os]; ok {
-			c.snapshot.store[os].add(e.values)
+		osId2, ok := c.snapshot.internedOwnedStrings[os]
+		if ok {
+			c.snapshot.store[osId2].add(e.values)
 		} else {
 			c.snapshot.arena.Inc(os, 1)
-			c.snapshot.store[os] = e
-			c.snapshot.internedOwnedStrings[os] = os
+			osId2 = c.snapshot.nextID()
+			c.snapshot.store[osId2] = e
+			c.snapshot.internedOwnedStrings[os] = osId2
+			c.snapshot.internedOwnedStringsReverse[osId2] = os
 		}
 		c.snapshotSize += uint64(Values(e.values).Size())
 		if e.needSort {
-			c.snapshot.store[os].needSort = true
+			c.snapshot.store[osId2].needSort = true
 		}
 		e.mu.RUnlock()
 	}
@@ -338,14 +351,17 @@ func (c *Cache) Snapshot() (*Cache, error) {
 
 	// Reset the cache
 	println("RECLAIMING STORE FROM SNAPSHOT")
-	oldM0 := c.store
-	oldM1 := c.internedOwnedStrings
+	oldM0 := c.internedOwnedStrings
 	oldArena := c.arena
 	c.store = nil
 	c.internedOwnedStrings = nil
-	reclaimStore(oldArena, oldM0, oldM1)
-	c.store = make(map[OwnedString]*entry, len(oldM0))
-	c.internedOwnedStrings = make(map[OwnedString]OwnedString, len(oldM1))
+	c.internedOwnedStringsReverse = nil
+
+	reclaimStore(oldArena, oldM0)
+
+	c.store = make(map[OwnedStringID]*entry, len(oldM0))
+	c.internedOwnedStrings = make(map[OwnedString]OwnedStringID, len(oldM0))
+	c.internedOwnedStringsReverse = make(map[OwnedStringID]OwnedString, len(oldM0))
 
 	c.size = 0
 	c.lastSnapshot = time.Now()
@@ -383,11 +399,10 @@ func (c *Cache) ClearSnapshot(success bool) {
 
 		c.updateSnapshots()
 
-		oldM0 := old.store
-		oldM1 := old.internedOwnedStrings
+		oldM0 := old.internedOwnedStrings
 		oldArena := old.arena
 		println("RECLAIMING STORE FROM CLEARSNAPSHOT")
-		reclaimStore(oldArena, oldM0, oldM1)
+		reclaimStore(oldArena, oldM0)
 
 	}
 }
@@ -446,26 +461,30 @@ func (c *Cache) DeleteRange(strangerKeys []string, min, max int64) {
 	for _, sk := range strangerKeys {
 		// Make sure key exist in the cache, skip if it does not
 		// this is not an ownership change
-		os, ok := c.internedOwnedStrings[OwnedString(sk)]
+		osId, ok := c.internedOwnedStrings[OwnedString(sk)]
 		if !ok {
 			continue
 		}
 
-		e := c.store[os]
+		e := c.store[osId]
 
 		origSize := e.size()
 		if min == math.MinInt64 && max == math.MaxInt64 {
+			os := c.internedOwnedStringsReverse[osId]
 			c.size -= uint64(origSize)
-			delete(c.store, os)
+			delete(c.store, osId)
 			delete(c.internedOwnedStrings, os)
+			delete(c.internedOwnedStringsReverse, osId)
 			c.arena.Dec(os, 1)
 			continue
 		}
 
 		e.filter(min, max)
 		if e.count() == 0 {
-			delete(c.store, os)
+			os := c.internedOwnedStringsReverse[osId]
+			delete(c.store, osId)
 			delete(c.internedOwnedStrings, os)
+			delete(c.internedOwnedStringsReverse, osId)
 			c.arena.Dec(os, 1)
 
 			c.size -= uint64(origSize)
@@ -488,13 +507,15 @@ func (c *Cache) SetMaxSize(size uint64) {
 // with a read-lock taken. Otherwise it must be called with a write-lock taken.
 func (c *Cache) merged(strangerKey string) Values {
 	// this is not an ownership change
-	e := c.store[OwnedString(strangerKey)]
-	if e == nil {
+	osId, ok := c.internedOwnedStrings[OwnedString(strangerKey)]
+	var e *entry
+	if !ok {
 		if c.snapshot == nil {
 			// No values in hot cache or snapshots.
 			return nil
 		}
 	} else {
+		e = c.store[osId]
 		e.deduplicate()
 	}
 
@@ -504,8 +525,9 @@ func (c *Cache) merged(strangerKey string) Values {
 	sz := 0
 
 	if c.snapshot != nil {
-		snapshotEntries := c.snapshot.store[OwnedString(strangerKey)]
-		if snapshotEntries != nil {
+		snapshotEntriesId, ok := c.snapshot.internedOwnedStrings[OwnedString(strangerKey)]
+		if ok {
+			snapshotEntries := c.snapshot.store[snapshotEntriesId]
 			snapshotEntries.deduplicate() // guarantee we are deduplicated
 			entries = append(entries, snapshotEntries)
 			sz += snapshotEntries.count()
@@ -555,7 +577,8 @@ func (c *Cache) KeysAndTypes() ([]string, []DataTypeResult) {
 	dtrs := make([]DataTypeResult, len(c.store))
 	buf := []byte{}
 	i := 0
-	for os, e := range c.store {
+	for osId, e := range c.store {
+		os := c.internedOwnedStringsReverse[osId]
 		buf = buf[:0]
 		buf = append(buf, os...)
 		heapString := string(buf)
@@ -589,10 +612,11 @@ func (c *Cache) RUnlock() {
 // already sorted. Should only be used in compact.go in the CacheKeyIterator
 func (c *Cache) values(strangerKey string) Values {
 	// this is not an ownership change
-	e := c.store[OwnedString(strangerKey)]
-	if e == nil {
+	osId, ok := c.internedOwnedStrings[OwnedString(strangerKey)]
+	if !ok {
 		return nil
 	}
+	e := c.store[osId]
 	return e.values
 }
 
@@ -600,22 +624,31 @@ func (c *Cache) values(strangerKey string) Values {
 // the lock has been taken and does not enforce the cache size limits.
 func (c *Cache) write(strangerKey string, values []Value) {
 	// this is not an ownership change
-	e, ok := c.store[OwnedString(strangerKey)]
-	if !ok {
+	osId, ok := c.internedOwnedStrings[OwnedString(strangerKey)]
+	var e *entry
+	if ok {
+		e = c.store[osId]
+	} else {
 		// this is an ownership change
-		os := c.arena.GetOwnedString(strangerKey)
 		e = newEntry()
-		c.store[os] = e
-		c.internedOwnedStrings[os] = os
+		os := c.arena.GetOwnedString(strangerKey)
+		osId := c.nextID()
+		c.store[osId] = e
+		c.internedOwnedStrings[os] = osId
+		c.internedOwnedStringsReverse[osId] = os
 	}
 	e.add(values)
 }
 
 func (c *Cache) entry(strangerKey string) *entry {
 	// low-contention path: entry exists, no write operations needed:
+	var e *entry
 	c.mu.RLock()
 	// this is not an ownership change
-	e, ok := c.store[OwnedString(strangerKey)]
+	osId, ok := c.internedOwnedStrings[OwnedString(strangerKey)]
+	if ok {
+		e = c.store[osId]
+	}
 	c.mu.RUnlock()
 
 	if ok {
@@ -626,13 +659,17 @@ func (c *Cache) entry(strangerKey string) *entry {
 	// one after checking again:
 	c.mu.Lock()
 
-	e, ok = c.store[OwnedString(strangerKey)]
-	if !ok {
+	osId, ok = c.internedOwnedStrings[OwnedString(strangerKey)]
+	if ok {
+		e = c.store[osId]
+	} else {
 		// this is an ownership change
 		os := c.arena.GetOwnedString(strangerKey)
+		osId := c.nextID()
 		e = newEntry()
-		c.store[os] = e
-		c.internedOwnedStrings[os] = os
+		c.store[osId] = e
+		c.internedOwnedStrings[os] = osId
+		c.internedOwnedStringsReverse[osId] = os
 	}
 
 	c.mu.Unlock()
