@@ -22,6 +22,7 @@ var (
 )
 
 type OwnedString string
+
 func (os OwnedString) ToString() string {
 	return string(os)
 }
@@ -154,12 +155,12 @@ const (
 
 // Cache maintains an in-memory store of Values for a set of keys.
 type Cache struct {
-	commit                      sync.Mutex
-	mu                          sync.RWMutex
-	store                       map[OwnedString]*entry
-	internedOwnedStrings        map[OwnedString]OwnedString
-	size                        uint64
-	maxSize                     uint64
+	commit               sync.Mutex
+	mu                   sync.RWMutex
+	store                map[OwnedString]*entry
+	internedOwnedStrings map[OwnedString]OwnedString
+	size                 uint64
+	maxSize              uint64
 
 	// snapshots are the cache objects that are currently being written to tsm files
 	// they're kept in memory while flushing so they can be queried along with the cache.
@@ -181,11 +182,11 @@ var globalStringSlabPool = NewStringSlabPool(16)
 // Only used for engine caches, never for snapshots
 func NewCache(maxSize uint64, path string) *Cache {
 	c := &Cache{
-		maxSize:                     maxSize,
-		store:                       make(map[OwnedString]*entry),
-		internedOwnedStrings:        make(map[OwnedString]OwnedString),
-		stats:        &CacheStatistics{},
-		lastSnapshot: time.Now(),
+		maxSize:              maxSize,
+		store:                make(map[OwnedString]*entry),
+		internedOwnedStrings: make(map[OwnedString]OwnedString),
+		stats:                &CacheStatistics{},
+		lastSnapshot:         time.Now(),
 	}
 	c.UpdateAge()
 	c.UpdateCompactTime(0)
@@ -311,8 +312,8 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	// If no snapshot exists, create a new one, otherwise update the existing snapshot
 	if c.snapshot == nil {
 		c.snapshot = &Cache{
-			store:                       make(map[OwnedString]*entry, len(c.store)),
-			internedOwnedStrings:        make(map[OwnedString]OwnedString, len(c.internedOwnedStrings)),
+			store:                make(map[OwnedString]*entry, len(c.store)),
+			internedOwnedStrings: make(map[OwnedString]OwnedString, len(c.internedOwnedStrings)),
 		}
 	}
 
