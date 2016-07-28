@@ -116,7 +116,7 @@ func NewCacheLocalArena() *CacheLocalArena {
 					println(i, "worker did", n)
 				}
 				//println(i, "doing a job")
-				j()
+				j.Do()
 			}
 		}(i)
 	}
@@ -197,7 +197,7 @@ func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	j.arena = s.arenas[arenaId]
 	j.mu = s.mus[arenaId]
 
-	s.queues[arenaId] <- j.Do
+	s.queues[arenaId] <- j
 	buf := <-j.ret
 	GetOwnedStringJobPool.Put(j)
 
@@ -246,7 +246,7 @@ func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	j.arena = arena
 	j.wg.Add(1)
 
-	s.queues[arenaId] <- j.Do
+	s.queues[arenaId] <- j
 	j.wg.Wait()
 	IncJobPool.Put(j)
 }
@@ -287,7 +287,7 @@ func (s *CacheLocalArena) Dec(os OwnedString, n int) {
 	j.arena = arena
 	j.wg.Add(1)
 
-	s.queues[arenaId] <- j.Do
+	s.queues[arenaId] <- j
 	j.wg.Wait()
 	DecJobPool.Put(j)
 
@@ -300,9 +300,14 @@ func embedStrInBuf(buf []byte, s string) string {
 	}
 
 	// first, copy the byte slice header info into the shadow prefix:
-	srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&buf))
-	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&(buf[:sizeOfSliceHeader][0])))
-	*dstHeader = *srcHeader
+	//srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&buf))
+	//dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&(buf[:sizeOfSliceHeader][0])))
+	//*dstHeader = *srcHeader
+	//srcHeader := *(*[24]byte)(unsafe.Pointer(&buf))
+	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&(buf[0])))
+	(*dstHeader).Data = uintptr(unsafe.Pointer(&(buf[0])))
+	(*dstHeader).Len = len(buf)
+	(*dstHeader).Cap = cap(buf)
 
 	// second, copy the hash into the next 8 bytes:
 	hash := FNV64a_Sum64(StringViewAsBytes(s))
@@ -362,4 +367,6 @@ func FNV64a_Sum64(key []byte) uint64 {
 	return hash
 }
 
-type CLAJob func()
+type CLAJob interface{
+	Do()
+}
