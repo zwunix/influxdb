@@ -91,6 +91,14 @@ func (p *ShardedByteSliceSlabPool) Get(l int) []byte {
 		shardId = rand.Intn(p.nshards)
 	}
 
+	return p.GetWithShardPreference(l, shardId)
+}
+
+func (p *ShardedByteSliceSlabPool) RandShardID() int {
+	return rand.Intn(p.nshards)
+}
+
+func (p *ShardedByteSliceSlabPool) GetWithShardPreference(l, shardId int) []byte {
 	pool := p.pools[shardId]
 
 	l2 := 8 + l
