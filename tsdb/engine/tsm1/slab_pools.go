@@ -1,6 +1,8 @@
 package tsm1
 
 import (
+	"encoding/binary"
+	"bytes"
 	"reflect"
 	//"os"
 	//"strconv"
@@ -16,14 +18,14 @@ var sizeOfSliceHeader uintptr = unsafe.Sizeof(reflect.SliceHeader{})
 
 type ByteSliceSlabPool struct {
 	arena *slab.Arena
-	sync.Mutex
+	*sync.Mutex
 	refs int64
 }
 
 func NewByteSliceSlabPool() *ByteSliceSlabPool {
 	return &ByteSliceSlabPool{
 		arena: slab.NewArena(1, 1024*1024, 2, nil),
-		Mutex: sync.Mutex{},
+		Mutex: &sync.Mutex{},
 		refs:  0,
 	}
 }
@@ -75,6 +77,14 @@ func NewShardedByteSliceSlabPool(nshards int) *ShardedByteSliceSlabPool {
 	}
 }
 
+func (p *ShardedByteSliceSlabPool) ApproximateRefs() int64 {
+	var n int64
+	for i := 0; i < p.nshards; i++ {
+		n += p.pools[i].Refs()
+	}
+	return n
+}
+
 func (p *ShardedByteSliceSlabPool) Get(l int) []byte {
 	shardId := 0
 	if p.nshards > 1 {
@@ -88,8 +98,9 @@ func (p *ShardedByteSliceSlabPool) Get(l int) []byte {
 
 	danglingMetadata := *(*reflect.SliceHeader)(unsafe.Pointer(&buf))
 
-	shardIdDst := (*uint64)(unsafe.Pointer(&(buf[0])))
-	*shardIdDst = uint64(shardId)
+	binary.LittleEndian.PutUint64(buf, uint64(shardId))
+	//shardIdDst := (*uint64)(unsafe.Pointer(&(buf[0])))
+	//*shardIdDst = uint64(shardId)
 
 	publicBuf := reflect.SliceHeader{
 		Data: danglingMetadata.Data + 8,
@@ -98,6 +109,12 @@ func (p *ShardedByteSliceSlabPool) Get(l int) []byte {
 	}
 
 	ret := *(*[]byte)(unsafe.Pointer(&publicBuf))
+
+	_, got1 := p.parsePublic(ret)
+	_ = bytes.Equal
+	if got1 != uint64(shardId) {
+		panic("bad shardId equal on sanity check")
+	}
 	return ret
 }
 func (p *ShardedByteSliceSlabPool) Inc(x []byte) {
@@ -118,9 +135,10 @@ func (p *ShardedByteSliceSlabPool) parsePublic(x []byte) ([]byte, uint64) {
 		Cap:  publicMetadataHeader.Cap,
 	}
 
-	shardId := *(*uint64)(unsafe.Pointer(privateMetadataHeader.Data))
+	//shardId := *(*uint64)(unsafe.Pointer(privateMetadataHeader.Data))
 
 	buf := *(*[]byte)(unsafe.Pointer(&privateMetadataHeader))
+	shardId := binary.LittleEndian.Uint64(buf)
 
 	return buf, shardId
 }
