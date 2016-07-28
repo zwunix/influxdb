@@ -1,14 +1,12 @@
 package tsm1
 
 import (
-	"encoding/binary"
 	"bytes"
-	"reflect"
-	//"os"
-	//"strconv"
+	"encoding/binary"
 	"math/rand"
-	"sync"
-	//"time"
+	"reflect"
+	"runtime"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/couchbase/go-slab" // slab
@@ -17,16 +15,16 @@ import (
 var sizeOfSliceHeader uintptr = unsafe.Sizeof(reflect.SliceHeader{})
 
 type ByteSliceSlabPool struct {
+	SpinLock
 	arena *slab.Arena
-	*sync.Mutex
-	refs int64
+	refs  int64
 }
 
 func NewByteSliceSlabPool() *ByteSliceSlabPool {
 	return &ByteSliceSlabPool{
-		arena: slab.NewArena(1, 1024*1024, 2, nil),
-		Mutex: &sync.Mutex{},
-		refs:  0,
+		arena:    slab.NewArena(1, 1024*1024, 2, nil),
+		SpinLock: SpinLock(lockUNLOCKED),
+		refs:     0,
 	}
 }
 
@@ -62,8 +60,9 @@ func (p *ByteSliceSlabPool) Refs() int64 {
 }
 
 type ShardedByteSliceSlabPool struct {
-	nshards int
-	pools   []*ByteSliceSlabPool
+	nshards      int
+	pools        []*ByteSliceSlabPool
+	smartShardID uint64
 }
 
 func NewShardedByteSliceSlabPool(nshards int) *ShardedByteSliceSlabPool {
@@ -87,6 +86,10 @@ func (p *ShardedByteSliceSlabPool) ApproximateRefs() int64 {
 
 func (p *ShardedByteSliceSlabPool) RandShardID() int {
 	return rand.Intn(p.nshards)
+}
+func (p *ShardedByteSliceSlabPool) SmartShardID() int {
+	ret := atomic.AddUint64(&p.smartShardID, 1)
+	return int(ret % uint64(p.nshards))
 }
 
 func (p *ShardedByteSliceSlabPool) Get(l, shardId int) []byte {
@@ -140,8 +143,6 @@ func (p *ShardedByteSliceSlabPool) parsePublic(x []byte) ([]byte, uint64) {
 		Len:  publicMetadataHeader.Len + 8,
 		Cap:  publicMetadataHeader.Cap,
 	}
-
-	//shardId := *(*uint64)(unsafe.Pointer(privateMetadataHeader.Data))
 
 	buf := *(*[]byte)(unsafe.Pointer(&privateMetadataHeader))
 	shardId := binary.LittleEndian.Uint64(buf)
@@ -208,4 +209,30 @@ func (p *StringSlabPool) parsePublic(s string) []byte {
 	privateBuf := *(*[]byte)(unsafe.Pointer(&metadata))
 
 	return privateBuf
+}
+
+// very simple spinlock
+// based on https://github.com/Cergoo/gol/blob/master/sync/spinlock/spinlock.go
+const (
+	lockUNLOCKED = 0
+	lockLOCKED   = 1
+)
+
+type SpinLock int64
+
+func (t *SpinLock) TryLock() bool {
+	return atomic.CompareAndSwapInt64((*int64)(t), lockUNLOCKED, lockLOCKED)
+}
+
+func (t *SpinLock) Lock() {
+	for {
+		if t.TryLock() {
+			return
+		}
+		runtime.Gosched()
+	}
+}
+
+func (t *SpinLock) Unlock() {
+	*t = lockUNLOCKED
 }

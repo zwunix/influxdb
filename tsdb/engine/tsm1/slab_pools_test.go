@@ -79,15 +79,16 @@ func TestStringSlabPoolUnsharded(t *testing.T) {
 		t.Fatal("expected overwrite s0")
 	}
 }
-func TestStringSlabPoolSharded(t *testing.T) {
+func TestStringSlabPoolSharded1(t *testing.T) {
 	p := NewStringSlabPool(16)
-	s0, b0 := p.Get(1, 1)
+	shardID := p.SmartShardID()
+	s0, b0 := p.Get(1, shardID)
 	b0[0] = 'x'
 	if s0 != "x" {
 		t.Fatal("bad string write s0")
 	}
 
-	s1, b1 := p.Get(1, 1)
+	s1, b1 := p.Get(1, shardID)
 	b1[0] = 'y'
 	if s1 != "y" {
 		t.Fatal("bad string write s1")
@@ -98,7 +99,7 @@ func TestStringSlabPoolSharded(t *testing.T) {
 
 	p.Dec(s0)
 
-	s2, b2 := p.Get(1, 1)
+	s2, b2 := p.Get(1, shardID)
 	b2[0] = 'z'
 	if s2 != "z" {
 		t.Fatal("bad string write s2")
@@ -106,8 +107,40 @@ func TestStringSlabPoolSharded(t *testing.T) {
 	if s1 != "y" {
 		t.Fatal("bad string write s1")
 	}
-	// this could fail every once in a while, since shardIds are random
+	if s0 != "z" {
+		t.Fatal("expected overwritten s0")
+	}
+}
+func TestStringSlabPoolSharded2(t *testing.T) {
+	p := NewStringSlabPool(16)
+	shardID := p.SmartShardID()
+	s0, b0 := p.Get(1, shardID)
+	b0[0] = 'x'
 	if s0 != "x" {
-		t.Fatal("expected dangling s0")
+		t.Fatal("bad string write s0")
+	}
+
+	s1, b1 := p.Get(1, shardID)
+	b1[0] = 'y'
+	if s1 != "y" {
+		t.Fatal("bad string write s1")
+	}
+	if s0 != "x" {
+		t.Fatal("bad overwrite s0")
+	}
+
+	p.Dec(s0)
+
+	shardID2 := p.SmartShardID()
+	s2, b2 := p.Get(1, shardID2)
+	b2[0] = 'z'
+	if s2 != "z" {
+		t.Fatal("bad string write s2")
+	}
+	if s1 != "y" {
+		t.Fatal("bad string write s1")
+	}
+	if s0 != "x" {
+		t.Fatal("expected preserved s0")
 	}
 }
