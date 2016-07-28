@@ -165,20 +165,20 @@ func (p *StringSlabPool) Get(l int) (string, []byte) {
 }
 
 func (p *StringSlabPool) Inc(s string) {
-	publicMetadata := *(*reflect.StringHeader)(unsafe.Pointer(&s))
-
-	metadata := *(*reflect.SliceHeader)(unsafe.Pointer(publicMetadata.Data - uintptr(sizeOfSliceHeader)))
-
-	metadataBuf := *(*[]byte)(unsafe.Pointer(&metadata))
-
+	privateBuf := p.parsePublic(s)
 	p.ShardedByteSliceSlabPool.Inc(metadataBuf)
 }
 func (p *StringSlabPool) Dec(s string) bool {
+	privateBuf := p.parsePublic(s)
+	return p.ShardedByteSliceSlabPool.Dec(privateBuf)
+}
+
+func (p *StringSlabPool) parsePublic(s string) []byte {
 	publicMetadata := *(*reflect.StringHeader)(unsafe.Pointer(&s))
 
 	metadata := *(*reflect.SliceHeader)(unsafe.Pointer(publicMetadata.Data - uintptr(sizeOfSliceHeader)))
 
-	metadataBuf := *(*[]byte)(unsafe.Pointer(&metadata))
+	privateBuf := *(*[]byte)(unsafe.Pointer(&metadata))
 
-	return p.ShardedByteSliceSlabPool.Dec(metadataBuf)
+	return privateBuf
 }
