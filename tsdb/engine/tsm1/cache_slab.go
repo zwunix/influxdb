@@ -217,29 +217,47 @@ func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	j.wg.Wait()
 	IncJobPool.Put(j)
 }
-func (s *CacheLocalArena) Dec(os OwnedString, n int) bool {
+type DecJob struct {
+	n int
+	embeddedBuf []byte
+	mu *sync.Mutex
+	arena *slab.Arena
+	wg *sync.WaitGroup
+}
+func (j *DecJob) Do() {
+	//println("trying to do GetOwnedString")
+	for ; j.n > 0; j.n-- {
+		//j.mu.Lock()
+		j.arena.DecRef(j.embeddedBuf)
+		//j.mu.Unlock()
+	}
+	j.wg.Done()
+}
+var DecJobPool = &sync.Pool{
+	New: func() interface{} {
+		return &DecJob{
+			wg: &sync.WaitGroup{},
+		}
+	},
+}
+func (s *CacheLocalArena) Dec(os OwnedString, n int) {
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf, hash := accessBufFromStr(strCast)
 
 	arenaId := hash % uint64(NSHARDS)
 	arena := s.arenas[arenaId]
 	//mu := s.mus[arenaId]
-	ret := make(chan bool, 1)
 
-	do := func() {
-		//println("trying to do Dec")
-		var zeroed bool
-		//mu.Lock()
-		for i := 0; i < n; i++ {
-			zeroed = arena.DecRef(embeddedBuf)
-		}
-		//mu.Unlock()
-		ret <- zeroed
-	}
+	j := DecJobPool.Get().(*DecJob)
+	j.n = n
+	j.embeddedBuf = embeddedBuf
+	j.arena = arena
+	j.wg.Add(1)
 
-	s.queues[arenaId] <- do
+	s.queues[arenaId] <- j.Do
+	j.wg.Wait()
 
-	return <-ret
+	return
 }
 
 func embedStrInBuf(buf []byte, s string) string {
