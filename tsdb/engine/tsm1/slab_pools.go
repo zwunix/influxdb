@@ -85,20 +85,18 @@ func (p *ShardedByteSliceSlabPool) ApproximateRefs() int64 {
 	return n
 }
 
-func (p *ShardedByteSliceSlabPool) Get(l int) []byte {
-	shardId := 0
-	if p.nshards > 1 {
-		shardId = rand.Intn(p.nshards)
-	}
-
-	return p.GetWithShardPreference(l, shardId)
-}
-
 func (p *ShardedByteSliceSlabPool) RandShardID() int {
 	return rand.Intn(p.nshards)
 }
 
-func (p *ShardedByteSliceSlabPool) GetWithShardPreference(l, shardId int) []byte {
+func (p *ShardedByteSliceSlabPool) Get(l, shardId int) []byte {
+	if shardId < 0 {
+		shardId = 0
+		if p.nshards > 1 {
+			shardId = rand.Intn(p.nshards)
+		}
+	}
+
 	pool := p.pools[shardId]
 
 	l2 := 8 + l
@@ -164,9 +162,9 @@ func NewStringSlabPool(nshards int) *StringSlabPool {
 	}
 }
 
-func (p *StringSlabPool) Get(l int) (string, []byte) {
+func (p *StringSlabPool) Get(l, shardId int) (string, []byte) {
 	l2 := int(sizeOfSliceHeader) + l
-	buf := p.ShardedByteSliceSlabPool.Get(l2)
+	buf := p.ShardedByteSliceSlabPool.Get(l2, shardId)
 
 	// we have to serialize this because it will not be returned to
 	// the caller:

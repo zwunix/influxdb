@@ -50,13 +50,13 @@ func TestByteSliceSlabPool(t *testing.T) {
 
 func TestStringSlabPoolUnsharded(t *testing.T) {
 	p := NewStringSlabPool(1)
-	s0, b0 := p.Get(1)
+	s0, b0 := p.Get(1, -1)
 	b0[0] = 'x'
 	if s0 != "x" {
 		t.Fatal("bad string write s0")
 	}
 
-	s1, b1 := p.Get(1)
+	s1, b1 := p.Get(1, -1)
 	b1[0] = 'y'
 	if s1 != "y" {
 		t.Fatal("bad string write s1")
@@ -67,7 +67,7 @@ func TestStringSlabPoolUnsharded(t *testing.T) {
 
 	p.Dec(s0)
 
-	s2, b2 := p.Get(1)
+	s2, b2 := p.Get(1, -1)
 	b2[0] = 'z'
 	if s2 != "z" {
 		t.Fatal("bad string write s2")
@@ -81,13 +81,13 @@ func TestStringSlabPoolUnsharded(t *testing.T) {
 }
 func TestStringSlabPoolSharded(t *testing.T) {
 	p := NewStringSlabPool(16)
-	s0, b0 := p.Get(1)
+	s0, b0 := p.Get(1, 1)
 	b0[0] = 'x'
 	if s0 != "x" {
 		t.Fatal("bad string write s0")
 	}
 
-	s1, b1 := p.Get(1)
+	s1, b1 := p.Get(1, 1)
 	b1[0] = 'y'
 	if s1 != "y" {
 		t.Fatal("bad string write s1")
@@ -98,7 +98,7 @@ func TestStringSlabPoolSharded(t *testing.T) {
 
 	p.Dec(s0)
 
-	s2, b2 := p.Get(1)
+	s2, b2 := p.Get(1, 1)
 	b2[0] = 'z'
 	if s2 != "z" {
 		t.Fatal("bad string write s2")
