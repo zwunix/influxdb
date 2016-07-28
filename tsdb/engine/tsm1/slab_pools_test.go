@@ -78,5 +78,4 @@ func TestStringSlabPool(t *testing.T) {
 	if s0 != "z" {
 		t.Fatal("expected overwrite s0")
 	}
-
 }

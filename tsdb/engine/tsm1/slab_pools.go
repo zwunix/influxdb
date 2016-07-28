@@ -1,7 +1,7 @@
 package tsm1
 
 import (
-	//"fmt"
+	"fmt"
 	"reflect"
 	//"os"
 	//"strconv"
@@ -12,7 +12,7 @@ import (
 	"github.com/couchbase/go-slab" // slab
 )
 
-var sizeOfSliceHeader = int(unsafe.Sizeof(reflect.SliceHeader{}))
+var sizeOfSliceHeader uintptr = unsafe.Sizeof(reflect.SliceHeader{})
 
 type ByteSliceSlabPool struct {
 	arena *slab.Arena
@@ -70,20 +70,26 @@ func NewStringSlabPool() *StringSlabPool{
 }
 
 func (p *StringSlabPool) Get(l int) (string, []byte) {
-	l2 := sizeOfSliceHeader + l
+	l2 := int(sizeOfSliceHeader) + l
 	buf := p.ByteSliceSlabPool.Get(l2)
 
-	// the bytes of the sliceheader
-	metadataBytes := (*(*[]byte)(unsafe.Pointer(&buf)))[:sizeOfSliceHeader]
-	copy(buf[:sizeOfSliceHeader], metadataBytes)
+	// we have to serialize this because it will not be returned to
+	// the caller:
+	danglingMetadata := *(*reflect.SliceHeader)(unsafe.Pointer(&buf))
 
-	metadata := *(*reflect.SliceHeader)(unsafe.Pointer(&buf))
+	metadata := (*reflect.SliceHeader)(unsafe.Pointer(&(buf[0])))
+	metadata.Data = danglingMetadata.Data
+	metadata.Len = danglingMetadata.Len
+	metadata.Cap = danglingMetadata.Cap
+
+	fmt.Printf("Alloc metadata: %v\n", metadata)
+
 	publicStr := reflect.StringHeader{
-		Data: metadata.Data + uintptr(sizeOfSliceHeader),
+		Data: metadata.Data + sizeOfSliceHeader,
 		Len: l,
 	}
 	publicBuf := reflect.SliceHeader{
-		Data: metadata.Data + uintptr(sizeOfSliceHeader),
+		Data: metadata.Data + sizeOfSliceHeader,
 		Len: l,
 		Cap: l,
 	}
@@ -99,28 +105,33 @@ func (p *StringSlabPool) Inc(s string) {
 
 	// find the metadata
 	// this step is needed to satisfy `go vet`
-	metadataHeader := reflect.SliceHeader{
-		Data: publicMetadata.Data - uintptr(sizeOfSliceHeader),
-		Len: sizeOfSliceHeader,
-		Cap: sizeOfSliceHeader,
-	}
-	metadata := *(*reflect.SliceHeader)(&metadataHeader)
+	//metadataPtrHeader := reflect.SliceHeader{
+	//	Data: publicMetadata.Data - uintptr(sizeOfSliceHeader),
+	//	Len: sizeOfSliceHeader,
+	//	Cap: sizeOfSliceHeader,
+	//}
+	//metadataPtr := *(*[]byte)(unsafe.Pointer(&metadataPtrHeader))
+	//metadata := *(*reflect.SliceHeader)(unsafe.Pointer(&metadataPtr))
+	metadata := *(*reflect.SliceHeader)(unsafe.Pointer(publicMetadata.Data - uintptr(sizeOfSliceHeader)))
+	fmt.Printf("Inc metadata: %v\n", metadata)
 
 	metadataBuf := *(*[]byte)(unsafe.Pointer(&metadata))
 
 	p.ByteSliceSlabPool.Inc(metadataBuf)
 }
-func (p *StringSlabPool)  Dec(s string) bool {
+func (p *StringSlabPool) Dec(s string) bool {
 	publicMetadata := *(*reflect.StringHeader)(unsafe.Pointer(&s))
 
 	// find the metadata
 	// this step is needed to satisfy `go vet`
-	metadataHeader := reflect.SliceHeader{
-		Data: publicMetadata.Data - uintptr(sizeOfSliceHeader),
-		Len: sizeOfSliceHeader,
-		Cap: sizeOfSliceHeader,
-	}
-	metadata := *(*reflect.SliceHeader)(&metadataHeader)
+	//metadataPtrHeader := reflect.SliceHeader{
+	//	Data: publicMetadata.Data - uintptr(sizeOfSliceHeader),
+	//	Len: sizeOfSliceHeader,
+	//	Cap: sizeOfSliceHeader,
+	//}
+	//metadataPtr := *(*[]byte)(unsafe.Pointer(&metadataPtrHeader))
+	metadata := *(*reflect.SliceHeader)(unsafe.Pointer(publicMetadata.Data - uintptr(sizeOfSliceHeader)))
+	fmt.Printf("Dec metadata: %v\n", metadata)
 
 	metadataBuf := *(*[]byte)(unsafe.Pointer(&metadata))
 
