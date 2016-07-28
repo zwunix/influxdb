@@ -110,3 +110,19 @@ func (p *StringSlabPool) Inc(s string) {
 
 	p.ByteSliceSlabPool.Inc(metadataBuf)
 }
+func (p *StringSlabPool)  Dec(s string) bool {
+	publicMetadata := *(*reflect.StringHeader)(unsafe.Pointer(&s))
+
+	// find the metadata
+	// this step is needed to satisfy `go vet`
+	metadataHeader := reflect.SliceHeader{
+		Data: publicMetadata.Data - uintptr(sizeOfSliceHeader),
+		Len: sizeOfSliceHeader,
+		Cap: sizeOfSliceHeader,
+	}
+	metadata := *(*reflect.SliceHeader)(&metadataHeader)
+
+	metadataBuf := *(*[]byte)(unsafe.Pointer(&metadata))
+
+	return p.ByteSliceSlabPool.Dec(metadataBuf)
+}

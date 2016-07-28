@@ -65,5 +65,18 @@ func TestStringSlabPool(t *testing.T) {
 		t.Fatal("bad overwrite s0")
 	}
 
+	p.Dec(s0)
+
+	s2, b2 := p.Get(1)
+	b2[0] = 'z'
+	if s2 != "z" {
+		t.Fatal("bad string write s2")
+	}
+	if s1 != "y" {
+		t.Fatal("bad string write s1")
+	}
+	if s0 != "z" {
+		t.Fatal("expected overwrite s0")
+	}
 
 }
