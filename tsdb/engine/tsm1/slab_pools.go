@@ -101,16 +101,16 @@ func (p *ShardedByteSliceSlabPool) Get(l int) []byte {
 	return ret
 }
 func (p *ShardedByteSliceSlabPool) Inc(x []byte) {
-	privateBuf, shardId := p.parsePrivateBuf(x)
+	privateBuf, shardId := p.parsePublic(x)
 	pool := p.pools[shardId]
 	pool.Inc(privateBuf)
 }
 func (p *ShardedByteSliceSlabPool) Dec(x []byte) bool {
-	privateBuf, shardId := p.parsePrivateBuf(x)
+	privateBuf, shardId := p.parsePublic(x)
 	pool := p.pools[shardId]
 	return pool.Dec(privateBuf)
 }
-func (p *ShardedByteSliceSlabPool) parsePrivateBuf(x []byte) ([]byte, uint64) {
+func (p *ShardedByteSliceSlabPool) parsePublic(x []byte) ([]byte, uint64) {
 	publicMetadataHeader := *(*reflect.SliceHeader)(unsafe.Pointer(&x))
 	privateMetadataHeader := reflect.SliceHeader{
 		Data: publicMetadataHeader.Data - 8,
