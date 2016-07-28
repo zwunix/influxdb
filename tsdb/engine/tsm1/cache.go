@@ -199,10 +199,18 @@ func NewCache(maxSize uint64, path string) *Cache {
 func reclaimStore(m0 map[OwnedString]*entry) {
 	start := time.Now().UnixNano()
 	println("RECLAIMING STORE")
+	var zeroed int64
 	for os := range m0 {
 		//delete(m0, os)
 		//delete(m1, os)
-		globalStringSlabPool.Dec(os.ToString())
+		ret := globalStringSlabPool.Dec(os.ToString())
+		if ret {
+			zeroed++
+		}
+	}
+	if len(m0) > 0 {
+		fmt.Printf("reclaimStore zeroed %d of %d (%f)\n",
+		zeroed, len(m0), float64(zeroed)/float64(len(m0))) 
 	}
 	//wg.Wait()
 	//if len(m0) != 0 {
