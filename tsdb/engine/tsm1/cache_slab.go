@@ -18,8 +18,6 @@ var sizeOfint = unsafe.Sizeof(uint(0))
 //var sizeOfSliceHeader = unsafe.Sizeof(reflect.SliceHeader{})
 var sizeOfStringHeader = unsafe.Sizeof(reflect.StringHeader{})
 
-type OwnedString string
-
 func (os OwnedString) ViewAsBytes() []byte {
 	osHeader := *(*reflect.StringHeader)(unsafe.Pointer(&os))
 	sliceHeader := reflect.SliceHeader{
