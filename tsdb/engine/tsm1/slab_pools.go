@@ -61,7 +61,7 @@ func (p *ByteSliceSlabPool) Refs() int64 {
 
 type ShardedByteSliceSlabPool struct {
 	nshards int
-	pools []*ByteSliceSlabPool
+	pools   []*ByteSliceSlabPool
 }
 
 func NewShardedByteSliceSlabPool(nshards int) *ShardedByteSliceSlabPool {
@@ -71,7 +71,7 @@ func NewShardedByteSliceSlabPool(nshards int) *ShardedByteSliceSlabPool {
 	}
 	return &ShardedByteSliceSlabPool{
 		nshards: nshards,
-		pools: pools,
+		pools:   pools,
 	}
 }
 
@@ -93,8 +93,8 @@ func (p *ShardedByteSliceSlabPool) Get(l int) []byte {
 
 	publicBuf := reflect.SliceHeader{
 		Data: danglingMetadata.Data + 8,
-		Len: danglingMetadata.Len - 8,
-		Cap: danglingMetadata.Cap,
+		Len:  danglingMetadata.Len - 8,
+		Cap:  danglingMetadata.Cap,
 	}
 
 	ret := *(*[]byte)(unsafe.Pointer(&publicBuf))
@@ -114,8 +114,8 @@ func (p *ShardedByteSliceSlabPool) parsePrivateBuf(x []byte) ([]byte, uint64) {
 	publicMetadataHeader := *(*reflect.SliceHeader)(unsafe.Pointer(&x))
 	privateMetadataHeader := reflect.SliceHeader{
 		Data: publicMetadataHeader.Data - 8,
-		Len: publicMetadataHeader.Len + 8,
-		Cap: publicMetadataHeader.Cap,
+		Len:  publicMetadataHeader.Len + 8,
+		Cap:  publicMetadataHeader.Cap,
 	}
 
 	shardId := *(*uint64)(unsafe.Pointer(privateMetadataHeader.Data))
@@ -129,7 +129,7 @@ type StringSlabPool struct {
 	ShardedByteSliceSlabPool
 }
 
-func NewStringSlabPool(nshards int) *StringSlabPool{
+func NewStringSlabPool(nshards int) *StringSlabPool {
 	if nshards <= 0 {
 		nshards = 1
 	}
@@ -153,12 +153,12 @@ func (p *StringSlabPool) Get(l int) (string, []byte) {
 
 	publicStr := reflect.StringHeader{
 		Data: metadata.Data + sizeOfSliceHeader,
-		Len: l,
+		Len:  l,
 	}
 	publicBuf := reflect.SliceHeader{
 		Data: metadata.Data + sizeOfSliceHeader,
-		Len: l,
-		Cap: l,
+		Len:  l,
+		Cap:  l,
 	}
 
 	retA := *(*string)(unsafe.Pointer(&publicStr))

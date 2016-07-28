@@ -2,8 +2,8 @@ package tsm1
 
 import (
 	"fmt"
-	"reflect"
 	"os"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -14,6 +14,7 @@ import (
 
 var sizeOfuintptr = unsafe.Sizeof(uintptr(0))
 var sizeOfint = unsafe.Sizeof(uint(0))
+
 //var sizeOfSliceHeader = unsafe.Sizeof(reflect.SliceHeader{})
 var sizeOfStringHeader = unsafe.Sizeof(reflect.StringHeader{})
 
@@ -112,7 +113,7 @@ func NewCacheLocalArena() *CacheLocalArena {
 			n := 0
 			for j := range queue {
 				n++
-				if n % 100000 == 0 {
+				if n%100000 == 0 {
 					println(i, "worker did", n)
 				}
 				//println(i, "doing a job")
@@ -169,18 +170,20 @@ func (s *CacheLocalArena) get(arenaId, l int) []byte {
 }
 
 type GetOwnedStringJob struct {
-	l int
-	mu *sync.Mutex
+	l     int
+	mu    *sync.Mutex
 	arena *slab.Arena
-	ret chan []byte
+	ret   chan []byte
 }
+
 func (j *GetOwnedStringJob) Do() {
-		//println("trying to do GetOwnedString")
-		//j.mu.Lock()
-		buf := j.arena.Alloc(j.l)
-		//j.mu.Unlock()
-		j.ret<-buf
+	//println("trying to do GetOwnedString")
+	//j.mu.Lock()
+	buf := j.arena.Alloc(j.l)
+	//j.mu.Unlock()
+	j.ret <- buf
 }
+
 var GetOwnedStringJobPool = &sync.Pool{
 	New: func() interface{} {
 		return &GetOwnedStringJob{
@@ -188,8 +191,9 @@ var GetOwnedStringJobPool = &sync.Pool{
 		}
 	},
 }
+
 func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
-	l := int(sizeOfSliceHeader)+len(src)+8
+	l := int(sizeOfSliceHeader) + len(src) + 8
 	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(CACHE_SLAB_SHARDS))
 
 	j := GetOwnedStringJobPool.Get().(*GetOwnedStringJob)
@@ -208,13 +212,15 @@ func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	//s.Dec(os) // sanity check
 	return os
 }
+
 type IncJob struct {
-	n int
+	n           int
 	embeddedBuf []byte
-	mu *sync.Mutex
-	arena *slab.Arena
-	wg *sync.WaitGroup
+	mu          *sync.Mutex
+	arena       *slab.Arena
+	wg          *sync.WaitGroup
 }
+
 func (j *IncJob) Do() {
 	//println("trying to do GetOwnedString")
 	for ; j.n > 0; j.n-- {
@@ -224,6 +230,7 @@ func (j *IncJob) Do() {
 	}
 	j.wg.Done()
 }
+
 var IncJobPool = &sync.Pool{
 	New: func() interface{} {
 		return &IncJob{
@@ -231,6 +238,7 @@ var IncJobPool = &sync.Pool{
 		}
 	},
 }
+
 func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf, hash := accessBufFromStr(strCast)
@@ -250,13 +258,15 @@ func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	j.wg.Wait()
 	IncJobPool.Put(j)
 }
+
 type DecJob struct {
-	n int
+	n           int
 	embeddedBuf []byte
-	mu *sync.Mutex
-	arena *slab.Arena
-	wg *sync.WaitGroup
+	mu          *sync.Mutex
+	arena       *slab.Arena
+	wg          *sync.WaitGroup
 }
+
 func (j *DecJob) Do() {
 	//println("trying to do GetOwnedString")
 	for ; j.n > 0; j.n-- {
@@ -266,6 +276,7 @@ func (j *DecJob) Do() {
 	}
 	j.wg.Done()
 }
+
 var DecJobPool = &sync.Pool{
 	New: func() interface{} {
 		return &DecJob{
@@ -273,6 +284,7 @@ var DecJobPool = &sync.Pool{
 		}
 	},
 }
+
 func (s *CacheLocalArena) Dec(os OwnedString, n int) {
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf, hash := accessBufFromStr(strCast)
@@ -367,6 +379,6 @@ func FNV64a_Sum64(key []byte) uint64 {
 	return hash
 }
 
-type CLAJob interface{
+type CLAJob interface {
 	Do()
 }

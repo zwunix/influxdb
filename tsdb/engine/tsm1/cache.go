@@ -150,13 +150,13 @@ const (
 // Cache maintains an in-memory store of Values for a set of keys.
 type OwnedStringID int64
 type Cache struct {
-	commit               sync.Mutex
-	mu                   sync.RWMutex
-	store                map[OwnedStringID]*entry
-	internedOwnedStrings map[OwnedString]OwnedStringID
+	commit                      sync.Mutex
+	mu                          sync.RWMutex
+	store                       map[OwnedStringID]*entry
+	internedOwnedStrings        map[OwnedString]OwnedStringID
 	internedOwnedStringsReverse map[OwnedStringID]OwnedString
-	size                 uint64
-	maxSize              uint64
+	size                        uint64
+	maxSize                     uint64
 
 	// snapshots are the cache objects that are currently being written to tsm files
 	// they're kept in memory while flushing so they can be queried along with the cache.
@@ -171,7 +171,7 @@ type Cache struct {
 	stats        *CacheStatistics
 	lastSnapshot time.Time
 
-	arena *CacheLocalArena
+	arena            *CacheLocalArena
 	ownedStringIDAcc int64
 }
 
@@ -189,13 +189,13 @@ func NewCache(maxSize uint64, path string) *Cache {
 		globalCacheArena = NewCacheLocalArena()
 	})
 	c := &Cache{
-		maxSize:              maxSize,
-		store:                make(map[OwnedStringID]*entry),
-		internedOwnedStrings: make(map[OwnedString]OwnedStringID),
+		maxSize:                     maxSize,
+		store:                       make(map[OwnedStringID]*entry),
+		internedOwnedStrings:        make(map[OwnedString]OwnedStringID),
 		internedOwnedStringsReverse: make(map[OwnedStringID]OwnedString),
-		stats:                &CacheStatistics{},
-		lastSnapshot:         time.Now(),
-		arena:                globalCacheArena,
+		stats:        &CacheStatistics{},
+		lastSnapshot: time.Now(),
+		arena:        globalCacheArena,
 	}
 	c.UpdateAge()
 	c.UpdateCompactTime(0)
@@ -221,7 +221,7 @@ func reclaimStore(cla *CacheLocalArena, m0 map[OwnedString]OwnedStringID) {
 	//	panic("nonempty m1 on reclaimStore")
 	//}
 	took := time.Now().UnixNano() - start
-	println("RECLAIMED STORE in ", took / 1e6, "ms")
+	println("RECLAIMED STORE in ", took/1e6, "ms")
 }
 
 // CacheStatistics hold statistics related to the cache.
@@ -319,10 +319,10 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	// If no snapshot exists, create a new one, otherwise update the existing snapshot
 	if c.snapshot == nil {
 		c.snapshot = &Cache{
-			store:                make(map[OwnedStringID]*entry, len(c.store)),
-			internedOwnedStrings: make(map[OwnedString]OwnedStringID, len(c.internedOwnedStrings)),
+			store:                       make(map[OwnedStringID]*entry, len(c.store)),
+			internedOwnedStrings:        make(map[OwnedString]OwnedStringID, len(c.internedOwnedStrings)),
 			internedOwnedStringsReverse: make(map[OwnedStringID]OwnedString, len(c.internedOwnedStringsReverse)),
-			arena:                globalCacheArena,
+			arena: globalCacheArena,
 		}
 	}
 
