@@ -129,9 +129,12 @@ type StringSlabPool struct {
 	ShardedByteSliceSlabPool
 }
 
-func NewStringSlabPool() *StringSlabPool{
+func NewStringSlabPool(nshards int) *StringSlabPool{
+	if nshards <= 0 {
+		nshards = 1
+	}
 	return &StringSlabPool{
-		ShardedByteSliceSlabPool: *NewShardedByteSliceSlabPool(1),
+		ShardedByteSliceSlabPool: *NewShardedByteSliceSlabPool(nshards),
 	}
 }
 
@@ -166,7 +169,7 @@ func (p *StringSlabPool) Get(l int) (string, []byte) {
 
 func (p *StringSlabPool) Inc(s string) {
 	privateBuf := p.parsePublic(s)
-	p.ShardedByteSliceSlabPool.Inc(metadataBuf)
+	p.ShardedByteSliceSlabPool.Inc(privateBuf)
 }
 func (p *StringSlabPool) Dec(s string) bool {
 	privateBuf := p.parsePublic(s)
