@@ -76,7 +76,11 @@ func NewShardedByteSliceSlabPool(nshards int) *ShardedByteSliceSlabPool {
 }
 
 func (p *ShardedByteSliceSlabPool) Get(l int) []byte {
-	shardId := rand.Intn(p.nshards)
+	shardId := 0
+	if p.nshards > 1 {
+		shardId = rand.Intn(p.nshards)
+	}
+
 	pool := p.pools[shardId]
 
 	l2 := 8 + l
@@ -99,7 +103,12 @@ func (p *ShardedByteSliceSlabPool) Get(l int) []byte {
 func (p *ShardedByteSliceSlabPool) Inc(x []byte) {
 	privateBuf, shardId := p.parsePrivateBuf(x)
 	pool := p.pools[shardId]
-	pool.Inc(buf)
+	pool.Inc(privateBuf)
+}
+func (p *ShardedByteSliceSlabPool) Dec(x []byte) bool {
+	privateBuf, shardId := p.parsePrivateBuf(x)
+	pool := p.pools[shardId]
+	return pool.Dec(privateBuf)
 }
 func (p *ShardedByteSliceSlabPool) parsePrivateBuf(x []byte) ([]byte, uint64) {
 	publicMetadataHeader := *(*reflect.SliceHeader)(unsafe.Pointer(&x))
@@ -115,25 +124,20 @@ func (p *ShardedByteSliceSlabPool) parsePrivateBuf(x []byte) ([]byte, uint64) {
 
 	return buf, shardId
 }
-func (p *ShardedByteSliceSlabPool) Dec(x []byte) bool {
-	privateBuf, shardId := p.parsePrivateBuf(x)
-	pool := p.pools[shardId]
-	return pool.Dec(buf)
-}
 
 type StringSlabPool struct {
-	ByteSliceSlabPool
+	ShardedByteSliceSlabPool
 }
 
 func NewStringSlabPool() *StringSlabPool{
 	return &StringSlabPool{
-		ByteSliceSlabPool: *NewByteSliceSlabPool(),
+		ShardedByteSliceSlabPool: *NewShardedByteSliceSlabPool(1),
 	}
 }
 
 func (p *StringSlabPool) Get(l int) (string, []byte) {
 	l2 := int(sizeOfSliceHeader) + l
-	buf := p.ByteSliceSlabPool.Get(l2)
+	buf := p.ShardedByteSliceSlabPool.Get(l2)
 
 	// we have to serialize this because it will not be returned to
 	// the caller:
@@ -167,7 +171,7 @@ func (p *StringSlabPool) Inc(s string) {
 
 	metadataBuf := *(*[]byte)(unsafe.Pointer(&metadata))
 
-	p.ByteSliceSlabPool.Inc(metadataBuf)
+	p.ShardedByteSliceSlabPool.Inc(metadataBuf)
 }
 func (p *StringSlabPool) Dec(s string) bool {
 	publicMetadata := *(*reflect.StringHeader)(unsafe.Pointer(&s))
@@ -176,5 +180,5 @@ func (p *StringSlabPool) Dec(s string) bool {
 
 	metadataBuf := *(*[]byte)(unsafe.Pointer(&metadata))
 
-	return p.ByteSliceSlabPool.Dec(metadataBuf)
+	return p.ShardedByteSliceSlabPool.Dec(metadataBuf)
 }
