@@ -176,7 +176,7 @@ type Cache struct {
 	lastSnapshot time.Time
 }
 
-var globalStringSlabPool = NewStringSlabPool(16)
+var globalStringSlabPool = NewStringSlabPool(64)
 
 // NewCache returns an instance of a cache which will use a maximum of maxSize bytes of memory.
 // Only used for engine caches, never for snapshots
