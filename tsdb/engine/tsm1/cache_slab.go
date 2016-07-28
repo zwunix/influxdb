@@ -45,7 +45,10 @@ func verboseMalloc(x int) []byte {
 	return make([]byte, x)
 }
 
-var NSHARDS int64 = 4
+var CACHE_SLAB_SHARDS int64 = 4
+var CACHE_SLAB_MB int = 1
+var CACHE_SLAB_ITEM_BYTES int = 1
+var CACHE_SLAB_QUEUE_DEPTH int = 1000
 
 func init() {
 	if s := os.Getenv("CACHE_SLAB_SHARDS"); s != "" {
@@ -53,24 +56,48 @@ func init() {
 		if err != nil {
 			panic(err.Error())
 		}
-		NSHARDS = int64(n)
+		CACHE_SLAB_SHARDS = int64(n)
 	}
-	println("CACHE_SLAB_SHARDS is", NSHARDS)
+	println("CACHE_SLAB_SHARDS is", CACHE_SLAB_SHARDS)
+	if s := os.Getenv("CACHE_SLAB_MB"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			panic(err.Error())
+		}
+		CACHE_SLAB_MB = int(n)
+	}
+	println("CACHE_SLAB_MB is", CACHE_SLAB_MB)
+	if s := os.Getenv("CACHE_SLAB_ITEM_BYTES"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			panic(err.Error())
+		}
+		CACHE_SLAB_ITEM_BYTES = int(n)
+	}
+	println("CACHE_SLAB_ITEM_BYTES is", CACHE_SLAB_ITEM_BYTES)
+	if s := os.Getenv("CACHE_SLAB_QUEUE_DEPTH"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			panic(err.Error())
+		}
+		CACHE_SLAB_QUEUE_DEPTH = int(n)
+	}
+	println("CACHE_SLAB_QUEUE_DEPTH is", CACHE_SLAB_QUEUE_DEPTH)
 }
 
 func NewCacheLocalArena() *CacheLocalArena {
-	arenas := make([]*slab.Arena, NSHARDS)
-	mus := make([]*sync.Mutex, NSHARDS)
-	queues := make([]chan CLAJob, NSHARDS)
+	arenas := make([]*slab.Arena, CACHE_SLAB_SHARDS)
+	mus := make([]*sync.Mutex, CACHE_SLAB_SHARDS)
+	queues := make([]chan CLAJob, CACHE_SLAB_SHARDS)
 	for i := range arenas {
 		j := i
 		f := func(l int) []byte {
 			println("go malloc", j, l)
 			return make([]byte, l)
 		}
-		arenas[i] = slab.NewArena(1, 1*1024*1024, 2, f)
+		arenas[i] = slab.NewArena(CACHE_SLAB_ITEM_BYTES, CACHE_SLAB_MB*1024*1024, 2, f)
 		mus[i] = &sync.Mutex{}
-		queues[i] = make(chan CLAJob, 1000)
+		queues[i] = make(chan CLAJob, CACHE_SLAB_QUEUE_DEPTH)
 	}
 	cla := &CacheLocalArena{
 		arenas: arenas,
@@ -82,7 +109,12 @@ func NewCacheLocalArena() *CacheLocalArena {
 		go func(i int) {
 			queue := cla.queues[i]
 			println("started worker", i)
+			n := 0
 			for j := range queue {
+				n++
+				if n % 100000 == 0 {
+					println(i, "worker did", n)
+				}
 				//println(i, "doing a job")
 				j()
 			}
@@ -127,6 +159,7 @@ type CacheLocalArena struct {
 }
 
 func (s *CacheLocalArena) get(arenaId, l int) []byte {
+	panic("unused")
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
 	mu.Lock()
@@ -157,7 +190,7 @@ var GetOwnedStringJobPool = &sync.Pool{
 }
 func (s *CacheLocalArena) GetOwnedString(src string) OwnedString {
 	l := int(sizeOfSliceHeader)+len(src)+8
-	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(NSHARDS))
+	arenaId := int(FNV64a_Sum64(StringViewAsBytes(src)) % uint64(CACHE_SLAB_SHARDS))
 
 	j := GetOwnedStringJobPool.Get().(*GetOwnedStringJob)
 	j.l = l
@@ -202,7 +235,7 @@ func (s *CacheLocalArena) Inc(os OwnedString, n int) {
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf, hash := accessBufFromStr(strCast)
 
-	arenaId := hash % uint64(NSHARDS)
+	arenaId := hash % uint64(CACHE_SLAB_SHARDS)
 	arena := s.arenas[arenaId]
 	mu := s.mus[arenaId]
 
@@ -244,7 +277,7 @@ func (s *CacheLocalArena) Dec(os OwnedString, n int) {
 	strCast := *(*string)(unsafe.Pointer(&os))
 	embeddedBuf, hash := accessBufFromStr(strCast)
 
-	arenaId := hash % uint64(NSHARDS)
+	arenaId := hash % uint64(CACHE_SLAB_SHARDS)
 	arena := s.arenas[arenaId]
 	//mu := s.mus[arenaId]
 
@@ -256,6 +289,7 @@ func (s *CacheLocalArena) Dec(os OwnedString, n int) {
 
 	s.queues[arenaId] <- j.Do
 	j.wg.Wait()
+	DecJobPool.Put(j)
 
 	return
 }
