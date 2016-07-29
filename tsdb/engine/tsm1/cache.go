@@ -68,7 +68,7 @@ func (eb *entryBatch) Get() *entry {
 }
 
 // add adds the given values to the entry.
-func (e *entry) add(values []Value) {
+func (e *entry) add(values []Value, shardID int) {
 	// See if the new values are sorted or contain duplicate timestamps
 	var (
 		prevTime int64
@@ -82,6 +82,17 @@ func (e *entry) add(values []Value) {
 		}
 		prevTime = v.UnixNano()
 	}
+
+	//_, canUsePool := values[0].(*IntegerValue)
+	//if canUsePool {
+	//	newValues := make([]Value, len(values))
+	//	for i, origV := range newValues {
+	//		newV := globalIntegerValueSlabPool.Get(shardID)
+	//		*newV = *(origV.(*IntegerValue))
+	//		newValues[i] = newV
+	//	}
+	//	values = newValues
+	//}
 
 	// if there are existing values make sure they're all less than the first of
 	// the new values being added
@@ -111,6 +122,7 @@ func (e *entry) deduplicate() {
 	if !e.needSort || len(e.values) == 0 {
 		return
 	}
+
 	e.values = e.values.Deduplicate()
 	e.needSort = false
 }
@@ -177,6 +189,7 @@ type Cache struct {
 }
 
 var globalStringSlabPool = NewStringSlabPool(64)
+var globalIntegerValueSlabPool = NewIntegerValueSlabPool(64)
 
 // NewCache returns an instance of a cache which will use a maximum of maxSize bytes of memory.
 // Only used for engine caches, never for snapshots
@@ -199,18 +212,30 @@ func NewCache(maxSize uint64, path string) *Cache {
 func reclaimStore(m0 map[OwnedString]*entry) {
 	start := time.Now().UnixNano()
 	println("RECLAIMING STORE")
-	var zeroed int64
+	var zeroedOS int64
+	//var zeroedIVs int64
 	for os := range m0 {
 		//delete(m0, os)
 		//delete(m1, os)
 		ret := globalStringSlabPool.Dec(os.ToString())
 		if ret {
-			zeroed++
+			zeroedOS++
 		}
+
+		//_, canUsePool := e.values[0].(*IntegerValue)
+		//if canUsePool {
+		//	for _, v := range e.values {
+		//		globalIntegerValueSlabPool.Dec(v.(*IntegerValue))
+		//		zeroedIVs++
+		//	}
+		//	e.values = e.values[:0]
+		//}
 	}
 	if len(m0) > 0 {
-		fmt.Printf("reclaimStore zeroed %d of %d (%f)\n",
-		zeroed, len(m0), float64(zeroed)/float64(len(m0))) 
+		fmt.Printf("reclaimStore zeroed OS %d of %d (%f)\n",
+		zeroedOS, len(m0), float64(zeroedOS)/float64(len(m0)))
+		//fmt.Printf("reclaimStore zeroed IV %d of %d (%f)\n",
+		//zeroedIVs, len(m0), float64(zeroedIVs)/float64(len(m0)))
 	}
 	//wg.Wait()
 	//if len(m0) != 0 {
@@ -289,10 +314,11 @@ func (c *Cache) WriteMulti(values map[string][]Value) error {
 	}
 	c.mu.RUnlock()
 
-	shardID := globalStringSlabPool.SmartShardID()
+	shardID0 := globalStringSlabPool.SmartShardID()
+	shardID1 := globalIntegerValueSlabPool.SmartShardID()
 
 	for k, v := range values {
-		c.entry(k, shardID).add(v)
+		c.entry(k, shardID0).add(v, shardID1)
 	}
 	c.mu.Lock()
 	c.size += uint64(totalSz)
@@ -326,14 +352,15 @@ func (c *Cache) Snapshot() (*Cache, error) {
 	}
 
 	// Append the current cache values to the snapshot
+	shardID1 := globalIntegerValueSlabPool.SmartShardID()
 	for os, e := range c.store {
 		e2, ok2 := c.snapshot.store[os]
 		e.mu.RLock()
 		if ok2 {
-			e2.add(e.values)
+			e2.add(e.values, shardID1)
 		} else {
 			e2 = newEntry()
-			e2.add(e.values)
+			e2.add(e.values, shardID1)
 			globalStringSlabPool.Inc(os.ToString())
 			c.snapshot.store[os] = e2
 			c.snapshot.internedOwnedStrings[os] = os
@@ -617,7 +644,7 @@ func (c *Cache) write(strangerKey string, values []Value) {
 		c.store[os] = e
 		c.internedOwnedStrings[os] = os
 	}
-	e.add(values)
+	e.add(values, -1)
 }
 
 func (c *Cache) entry(strangerKey string, shardID int) *entry {

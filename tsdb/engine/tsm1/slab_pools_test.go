@@ -144,3 +144,74 @@ func TestStringSlabPoolSharded2(t *testing.T) {
 		t.Fatal("expected preserved s0")
 	}
 }
+func TestIntegerValueSlabPoolUnsharded(t *testing.T) {
+	p := NewIntegerValueSlabPool(1)
+	iv0 := p.Get(-1)
+	iv0.unixnano = 1000
+	iv0.value = 1001
+
+	iv1 := p.Get(-1)
+	iv1.unixnano = 2000
+	iv1.value = 2001
+
+	if iv0.unixnano != 1000 {
+		t.Fatal("bad overwrite iv0.unixnano")
+	}
+	if iv0.value != 1001 {
+		t.Fatal("bad overwrite iv0.value")
+	}
+
+	p.Dec(iv0)
+
+	iv2 := p.Get(-1)
+	iv2.unixnano = 3000
+	iv2.value = 3001
+	if iv0.unixnano != 3000 {
+		t.Fatal("expected overwrite with iv2.unixnano")
+	}
+	if iv0.value != 3001 {
+		t.Fatal("expected overwrite with iv2.value")
+	}
+	if iv1.unixnano != 2000 {
+		t.Fatal("unexpected overwrite iv1.unixnano")
+	}
+	if iv1.value != 2001 {
+		t.Fatal("unexpected overwrite iv1.value")
+	}
+}
+
+func TestFloatValueSlabPoolUnsharded(t *testing.T) {
+	p := NewFloatValueSlabPool(1)
+	iv0 := p.Get(-1)
+	iv0.unixnano = 1000
+	iv0.value = 1001.
+
+	iv1 := p.Get(-1)
+	iv1.unixnano = 2000
+	iv1.value = 2001.
+
+	if iv0.unixnano != 1000 {
+		t.Fatal("bad overwrite iv0.unixnano")
+	}
+	if iv0.value != 1001. {
+		t.Fatal("bad overwrite iv0.value")
+	}
+
+	p.Dec(iv0)
+
+	iv2 := p.Get(-1)
+	iv2.unixnano = 3000
+	iv2.value = 3001.
+	if iv0.unixnano != 3000 {
+		t.Fatal("expected overwrite with iv2.unixnano")
+	}
+	if iv0.value != 3001. {
+		t.Fatal("expected overwrite with iv2.value")
+	}
+	if iv1.unixnano != 2000 {
+		t.Fatal("unexpected overwrite iv1.unixnano")
+	}
+	if iv1.value != 2001. {
+		t.Fatal("unexpected overwrite iv1.value")
+	}
+}

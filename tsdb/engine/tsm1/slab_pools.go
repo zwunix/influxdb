@@ -13,6 +13,8 @@ import (
 )
 
 var sizeOfSliceHeader uintptr = unsafe.Sizeof(reflect.SliceHeader{})
+var sizeOfIntegerValue uintptr = unsafe.Sizeof(IntegerValue{})
+var sizeOfFloatValue uintptr = unsafe.Sizeof(FloatValue{})
 
 type ByteSliceSlabPool struct {
 	SpinLock
@@ -211,6 +213,103 @@ func (p *StringSlabPool) parsePublic(s string) []byte {
 	return privateBuf
 }
 
+type IntegerValueSlabPool struct {
+	ShardedByteSliceSlabPool
+}
+
+func NewIntegerValueSlabPool(nshards int) *IntegerValueSlabPool {
+	if nshards <= 0 {
+		nshards = 1
+	}
+	return &IntegerValueSlabPool{
+		ShardedByteSliceSlabPool: *NewShardedByteSliceSlabPool(nshards),
+	}
+}
+
+func (p *IntegerValueSlabPool) Get(shardId int) *IntegerValue {
+	l := int(sizeOfSliceHeader) + int(sizeOfIntegerValue)
+	buf := p.ShardedByteSliceSlabPool.Get(l, shardId)
+
+	danglingMetadata := *(*reflect.SliceHeader)(unsafe.Pointer(&buf))
+
+	metadata := (*reflect.SliceHeader)(unsafe.Pointer(&(buf[0])))
+	metadata.Data = danglingMetadata.Data
+	metadata.Len = danglingMetadata.Len
+	metadata.Cap = danglingMetadata.Cap
+
+	for i := int(sizeOfSliceHeader); i < len(buf); i++ {
+		buf[i] = 0
+	}
+
+	publicIv := (*IntegerValue)(unsafe.Pointer(&buf[sizeOfSliceHeader]))
+
+	return publicIv
+}
+
+func (p *IntegerValueSlabPool) Inc(iv *IntegerValue) {
+	privateBuf := p.parsePublic(iv)
+	p.ShardedByteSliceSlabPool.Inc(privateBuf)
+}
+func (p *IntegerValueSlabPool) Dec(iv *IntegerValue) bool {
+	privateBuf := p.parsePublic(iv)
+	return p.ShardedByteSliceSlabPool.Dec(privateBuf)
+}
+
+func (p *IntegerValueSlabPool) parsePublic(iv *IntegerValue) []byte {
+	loc := uintptr(unsafe.Pointer(iv)) - sizeOfSliceHeader
+	metadata := *(*reflect.SliceHeader)(unsafe.Pointer(loc))
+	privateBuf := *(*[]byte)(unsafe.Pointer(&metadata))
+	return privateBuf
+}
+
+type FloatValueSlabPool struct {
+	ShardedByteSliceSlabPool
+}
+
+func NewFloatValueSlabPool(nshards int) *FloatValueSlabPool {
+	if nshards <= 0 {
+		nshards = 1
+	}
+	return &FloatValueSlabPool{
+		ShardedByteSliceSlabPool: *NewShardedByteSliceSlabPool(nshards),
+	}
+}
+
+func (p *FloatValueSlabPool) Get(shardId int) *FloatValue {
+	l := int(sizeOfSliceHeader) + int(sizeOfFloatValue)
+	buf := p.ShardedByteSliceSlabPool.Get(l, shardId)
+
+	danglingMetadata := *(*reflect.SliceHeader)(unsafe.Pointer(&buf))
+
+	metadata := (*reflect.SliceHeader)(unsafe.Pointer(&(buf[0])))
+	metadata.Data = danglingMetadata.Data
+	metadata.Len = danglingMetadata.Len
+	metadata.Cap = danglingMetadata.Cap
+
+	for i := int(sizeOfSliceHeader); i < len(buf); i++ {
+		buf[i] = 0
+	}
+
+	publicIv := (*FloatValue)(unsafe.Pointer(&buf[sizeOfSliceHeader]))
+
+	return publicIv
+}
+
+func (p *FloatValueSlabPool) Inc(iv *FloatValue) {
+	privateBuf := p.parsePublic(iv)
+	p.ShardedByteSliceSlabPool.Inc(privateBuf)
+}
+func (p *FloatValueSlabPool) Dec(iv *FloatValue) bool {
+	privateBuf := p.parsePublic(iv)
+	return p.ShardedByteSliceSlabPool.Dec(privateBuf)
+}
+
+func (p *FloatValueSlabPool) parsePublic(iv *FloatValue) []byte {
+	loc := uintptr(unsafe.Pointer(iv)) - sizeOfSliceHeader
+	metadata := *(*reflect.SliceHeader)(unsafe.Pointer(loc))
+	privateBuf := *(*[]byte)(unsafe.Pointer(&metadata))
+	return privateBuf
+}
 // very simple spinlock
 // based on https://github.com/Cergoo/gol/blob/master/sync/spinlock/spinlock.go
 const (
