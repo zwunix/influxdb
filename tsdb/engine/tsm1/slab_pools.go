@@ -310,6 +310,7 @@ func (p *FloatValueSlabPool) parsePublic(iv *FloatValue) []byte {
 	privateBuf := *(*[]byte)(unsafe.Pointer(&metadata))
 	return privateBuf
 }
+
 // very simple spinlock
 // based on https://github.com/Cergoo/gol/blob/master/sync/spinlock/spinlock.go
 const (

@@ -233,7 +233,7 @@ func reclaimStore(m0 map[OwnedString]*entry) {
 	}
 	if len(m0) > 0 {
 		fmt.Printf("reclaimStore zeroed OS %d of %d (%f)\n",
-		zeroedOS, len(m0), float64(zeroedOS)/float64(len(m0)))
+			zeroedOS, len(m0), float64(zeroedOS)/float64(len(m0)))
 		//fmt.Printf("reclaimStore zeroed IV %d of %d (%f)\n",
 		//zeroedIVs, len(m0), float64(zeroedIVs)/float64(len(m0)))
 	}
