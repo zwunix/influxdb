@@ -16,15 +16,19 @@ import (
 )
 
 var (
-	measurementEscapeCodes = map[byte][]byte{
-		',': []byte(`\,`),
-		' ': []byte(`\ `),
+	measurementEscapeCodes = []struct {
+		unescaped, escaped []byte
+	}{
+		{[]byte(`,`), []byte(`\,`)},
+		{[]byte(` `), []byte(`\ `)},
 	}
 
-	tagEscapeCodes = map[byte][]byte{
-		',': []byte(`\,`),
-		' ': []byte(`\ `),
-		'=': []byte(`\=`),
+	tagEscapeCodes = []struct {
+		unescaped, escaped []byte
+	}{
+		{[]byte(`,`), []byte(`\,`)},
+		{[]byte(` `), []byte(`\ `)},
+		{[]byte(`=`), []byte(`\=`)},
 	}
 
 	ErrPointMustHaveAField  = errors.New("point without fields is unsupported")
@@ -1022,23 +1026,27 @@ func scanFieldValue(buf []byte, i int) (int, []byte) {
 }
 
 func escapeMeasurement(in []byte) []byte {
-	for b, esc := range measurementEscapeCodes {
-		in = bytes.Replace(in, []byte{b}, esc, -1)
+	for _, ec := range measurementEscapeCodes {
+		if bytes.Contains(in, ec.unescaped) {
+			in = bytes.Replace(in, ec.unescaped, ec.escaped, -1)
+		}
 	}
 	return in
 }
 
 func unescapeMeasurement(in []byte) []byte {
-	for b, esc := range measurementEscapeCodes {
-		in = bytes.Replace(in, esc, []byte{b}, -1)
+	for _, ec := range measurementEscapeCodes {
+		if bytes.Contains(in, ec.escaped) {
+			in = bytes.Replace(in, ec.escaped, ec.unescaped, -1)
+		}
 	}
 	return in
 }
 
 func escapeTag(in []byte) []byte {
-	for b, esc := range tagEscapeCodes {
-		if bytes.IndexByte(in, b) != -1 {
-			in = bytes.Replace(in, []byte{b}, esc, -1)
+	for _, ec := range tagEscapeCodes {
+		if bytes.Contains(in, ec.unescaped) {
+			in = bytes.Replace(in, ec.unescaped, ec.escaped, -1)
 		}
 	}
 	return in
@@ -1049,9 +1057,9 @@ func unescapeTag(in []byte) []byte {
 		return in
 	}
 
-	for b, esc := range tagEscapeCodes {
-		if bytes.IndexByte(in, b) != -1 {
-			in = bytes.Replace(in, esc, []byte{b}, -1)
+	for _, ec := range tagEscapeCodes {
+		if bytes.Contains(in, ec.escaped) {
+			in = bytes.Replace(in, ec.escaped, ec.unescaped, -1)
 		}
 	}
 	return in
@@ -1489,7 +1497,7 @@ func (a Tags) HashKey() []byte {
 		return nil
 	}
 
-	escaped := make(Tags, 0, len(a))
+	escaped := getHashKeyTagsPool()
 	for _, t := range a {
 		ek := escapeTag(t.Key)
 		ev := escapeTag(t.Value)
@@ -1501,13 +1509,12 @@ func (a Tags) HashKey() []byte {
 
 	// Extract keys and determine final size.
 	sz := len(escaped) + (len(escaped) * 2) // separators
-	keys := make([][]byte, len(escaped)+1)
-	for i, t := range escaped {
-		keys[i] = t.Key
+	keys := getHashKeyBufSlicePool()
+	for _, t := range escaped {
+		keys = append(keys, t.Key)
 		sz += len(t.Key) + len(t.Value)
 	}
-	keys = keys[:len(escaped)]
-	sort.Sort(byteSlices(keys))
+	byteSlices(keys).InsertionSort()
 
 	// Generate marshaled bytes.
 	b := make([]byte, sz)
@@ -1524,6 +1531,10 @@ func (a Tags) HashKey() []byte {
 		copy(buf[idx:idx+len(v)], v)
 		idx += len(v)
 	}
+	// return temporary objects to pools:
+	putHashKeyTagsPool(escaped)
+	putHashKeyBufSlicePool(keys)
+
 	return b[:idx]
 }
 
@@ -1534,18 +1545,26 @@ type Fields map[string]interface{}
 func parseNumber(val []byte) (interface{}, error) {
 	if val[len(val)-1] == 'i' {
 		val = val[:len(val)-1]
-		return strconv.ParseInt(string(val), 10, 64)
+		// This usage of unsafeBytesToString is safe because no
+		// references to it are kept by strconv.ParseInt nor do we
+		// return a reference:
+		return strconv.ParseInt(unsafeBytesToString(val), 10, 64)
 	}
 	for i := 0; i < len(val); i++ {
 		// If there is a decimal or an N (NaN), I (Inf), parse as float
 		if val[i] == '.' || val[i] == 'N' || val[i] == 'n' || val[i] == 'I' || val[i] == 'i' || val[i] == 'e' {
-			return strconv.ParseFloat(string(val), 64)
+			// This usage of unsafeBytesToString is safe
+			// because no references to it are kept by
+			// strconv.ParseFloat nor do we return a reference:
+			return strconv.ParseFloat(unsafeBytesToString(val), 64)
 		}
 		if val[i] < '0' && val[i] > '9' {
 			return string(val), nil
 		}
 	}
-	return strconv.ParseFloat(string(val), 64)
+	// This usage of unsafeBytesToString is safe because no references to
+	// it are kept by strconv.ParseFloat nor do we return a reference:
+	return strconv.ParseFloat(unsafeBytesToString(val), 64)
 }
 
 func newFieldsFromBinary(buf []byte) Fields {
@@ -1583,7 +1602,11 @@ func newFieldsFromBinary(buf []byte) Fields {
 
 				// Otherwise parse it as bool
 			} else {
-				value, err = strconv.ParseBool(string(valueBuf))
+				// This usage of unsafeBytesToString is safe
+				// because no references to it are kept by
+				// strconv.ParseFloat nor do we return a
+				// reference:
+				value, err = strconv.ParseBool(unsafeBytesToString(valueBuf))
 				if err != nil {
 					panic(fmt.Sprintf("unable to parse bool value '%v': %v\n", string(valueBuf), err))
 				}
@@ -1677,3 +1700,13 @@ type byteSlices [][]byte
 func (a byteSlices) Len() int           { return len(a) }
 func (a byteSlices) Less(i, j int) bool { return bytes.Compare(a[i], a[j]) == -1 }
 func (a byteSlices) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
+// InsertionSort is a simple alloc-free sort.
+func (a byteSlices) InsertionSort() {
+	l := a.Len()
+	for i := 1; i < l; i++ {
+		for j := i; j > 0 && a.Less(j, j-1); j-- {
+			a.Swap(j, j-1)
+		}
+	}
+}
