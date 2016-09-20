@@ -1041,7 +1041,7 @@ func (itr *seriesIterator) nextKeys() error {
 		itr.mms = itr.mms[1:]
 
 		// Read all series keys.
-		ids, err := mm.seriesIDsAllOrByExpr(itr.opt.Condition)
+		ids, err := mm.SeriesIDsAllOrByExpr(itr.opt.Condition)
 		if err != nil {
 			return err
 		} else if len(ids) == 0 {
