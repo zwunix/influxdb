@@ -7,8 +7,11 @@ import (
 	"regexp"
 	"testing"
 
+	"strings"
+
 	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/models"
+	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxdb/tsdb/index/tsi1"
 )
 
@@ -326,4 +329,63 @@ func (idx *Index) CreateSeriesSliceIfNotExists(a []Series) error {
 		}
 	}
 	return nil
+}
+
+func BenchmarkTagSets(b *testing.B) {
+	for _, tt := range []struct {
+		condition  string
+		dimensions []string
+	}{
+		{},
+	} {
+		parts := make([]string, 0, 3)
+		var condition influxql.Expr
+		if tt.condition != "" {
+			parts = append(parts, fmt.Sprintf("WHERE %s", tt.condition))
+			if cond, err := influxql.ParseExpr(tt.condition); err != nil {
+				b.Fatalf("unable to parse condition: %s", err)
+			} else {
+				condition = cond
+			}
+		}
+		if len(tt.dimensions) > 0 {
+			parts = append(parts, fmt.Sprintf("GROUP BY %s", strings.Join(tt.dimensions, ", ")))
+		}
+
+		for _, count := range []struct {
+			Name string
+			N    int
+		}{
+			{Name: "10K", N: 10000},
+			{Name: "100K", N: 100000},
+			{Name: "1M", N: 1000000},
+			{Name: "100M", N: 100000000},
+		} {
+			names := append(parts, count.Name)
+			b.Run(strings.Join(names, "_"), func(b *testing.B) {
+				index := MustOpenIndex()
+				defer index.Close()
+
+				for i := 0; i < count.N; i++ {
+					host := fmt.Sprintf("server%04d", i)
+					tags := models.NewTags(map[string]string{"host": host})
+					key := fmt.Sprintf("cpu,host=%s", host)
+					if err := index.CreateSeriesIfNotExists([]byte(key), []byte("cpu"), tags); err != nil {
+						b.Fatal(err)
+					}
+				}
+				index.Compact()
+
+				b.ResetTimer()
+				b.ReportAllocs()
+
+				for i := 0; i < b.N; i++ {
+					index.TagSets([]byte("cpu"), query.IteratorOptions{
+						Condition:  condition,
+						Dimensions: tt.dimensions,
+					})
+				}
+			})
+		}
+	}
 }
