@@ -266,6 +266,16 @@ func (f *SeriesFile) SeriesKeyPartition(key []byte) *SeriesPartition {
 	return f.partitions[partitionID]
 }
 
+// Statistics returns statistics for the SeriesFile.
+func (f *SeriesFile) Statistics(tags map[string]string) []models.Statistic {
+	statistics := make([]models.Statistic, 0, len(f.partitions))
+
+	for _, p := range f.partitions {
+		statistics = append(statistics, p.Statistics(tags)...)
+	}
+	return statistics
+}
+
 // AppendSeriesKey serializes name and tags to a byte slice.
 // The total length is prepended as a uvarint.
 func AppendSeriesKey(dst []byte, name []byte, tags models.Tags) []byte {

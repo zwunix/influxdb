@@ -40,18 +40,28 @@ type SeriesPartition struct {
 
 	CompactThreshold int
 
+	// Statistic tags about this specific partition
+	defaultTags *models.StatisticTags
+
 	Logger *zap.Logger
 }
 
 // NewSeriesPartition returns a new instance of SeriesPartition.
 func NewSeriesPartition(id int, path string) *SeriesPartition {
-	return &SeriesPartition{
+	p := &SeriesPartition{
 		id:               id,
 		path:             path,
+		seq:              uint64(id) + 1,
 		CompactThreshold: DefaultSeriesPartitionCompactThreshold,
 		Logger:           zap.NewNop(),
-		seq:              uint64(id) + 1,
 	}
+
+	p.defaultTags = &models.StatisticTags{
+		"path": p.Path(),
+		"id":   fmt.Sprint(p.id),
+	}
+
+	return p
 }
 
 // Open memory maps the data file at the partition's path.
@@ -469,6 +479,14 @@ func (p *SeriesPartition) seriesKeyByOffset(offset int64) []byte {
 	}
 
 	return nil
+}
+
+// Statistics returns statistics for the Partition.
+func (p *SeriesPartition) Statistics(tags map[string]string) []models.Statistic {
+	tags = p.defaultTags.Merge(tags)
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.index.keyIDMap.Statistics(tags)
 }
 
 // SeriesPartitionCompactor represents an object reindexes a series partition and optionally compacts segments.

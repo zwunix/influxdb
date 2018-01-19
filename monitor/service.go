@@ -451,6 +451,7 @@ func (m *Monitor) storeStatistics() {
 				pt, err := models.NewPoint(s.Name, models.NewTags(s.Tags), s.Values, now)
 				if err != nil {
 					m.Logger.Info(fmt.Sprintf("Dropping point %v: %v", s.Name, err))
+					fmt.Printf("%q %v %v %v", s.Name, models.NewTags(s.Tags), s.Values, now)
 					return
 				}
 				batch = append(batch, pt)

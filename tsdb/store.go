@@ -116,6 +116,12 @@ func (s *Store) Statistics(tags map[string]string) []models.Statistic {
 				statDatabaseMeasurements: mc,
 			},
 		})
+
+		// Call Statistics on each series file.
+		sfile := s.seriesFile(database)
+		if sfile != nil {
+			statistics = append(statistics, sfile.Statistics(models.StatisticTags{"database": database}.Merge(tags))...)
+		}
 	}
 
 	// Gather all statistics for all shards.

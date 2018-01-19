@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"sort"
+	"sync/atomic"
+
+	"github.com/influxdata/influxdb/models"
 
 	"github.com/cespare/xxhash"
 )
@@ -19,15 +22,60 @@ type HashMap struct {
 	threshold  int64
 	mask       int64
 	loadFactor int
+
+	statistics *Statistics
 }
 
+// NewHashMap initialises a new HashMap.
 func NewHashMap(opt Options) *HashMap {
 	m := &HashMap{
 		capacity:   pow2(opt.Capacity), // Limited to 2^64.
 		loadFactor: opt.LoadFactor,
+		statistics: &Statistics{},
 	}
+
+	atomic.StoreInt64(&m.statistics.LoadFactor, int64(m.loadFactor))
 	m.alloc()
 	return m
+}
+
+// Statistics gathers statistics about a HashMap.
+type Statistics struct {
+	Capacity   int64
+	LoadFactor int64
+	Threshold  int64
+	Gets       int64
+	GetProbes  int64
+	Puts       int64
+	PutProbes  int64
+	Swaps      int64
+}
+
+const statCapacity = "statCapacity"
+const statLoadFactor = "statLoadFactor"
+const statThreshold = "statThreshold"
+const statGets = "statGets"
+const statGetProbes = "statGetProbes"
+const statPuts = "statPuts"
+const statPutProbes = "statPutProbes"
+const statSwaps = "statSwaps"
+
+// Statistics returns statistics for periodic monitoring.
+func (h *HashMap) Statistics(tags map[string]string) []models.Statistic {
+	return []models.Statistic{{
+		Name: "rhh_map",
+		Tags: tags,
+		Values: map[string]interface{}{
+			statCapacity:   atomic.LoadInt64(&h.statistics.Capacity),
+			statLoadFactor: atomic.LoadInt64(&h.statistics.LoadFactor),
+			statThreshold:  atomic.LoadInt64(&h.statistics.Threshold),
+			statGets:       atomic.LoadInt64(&h.statistics.Gets),
+			statGetProbes:  atomic.LoadInt64(&h.statistics.GetProbes),
+			statPuts:       atomic.LoadInt64(&h.statistics.Puts),
+			statPutProbes:  atomic.LoadInt64(&h.statistics.PutProbes),
+			statSwaps:      atomic.LoadInt64(&h.statistics.Swaps),
+		},
+	}}
 }
 
 // Reset clears the values in the map without deallocating the space.
@@ -40,6 +88,7 @@ func (m *HashMap) Reset() {
 }
 
 func (m *HashMap) Get(key []byte) interface{} {
+	atomic.AddInt64(&m.statistics.Gets, 1)
 	i := m.index(key)
 	if i == -1 {
 		return nil
@@ -48,6 +97,7 @@ func (m *HashMap) Get(key []byte) interface{} {
 }
 
 func (m *HashMap) Put(key []byte, val interface{}) {
+	atomic.AddInt64(&m.statistics.Puts, 1)
 	// Grow the map if we've run out of slots.
 	m.n++
 	if m.n > m.threshold {
@@ -67,6 +117,7 @@ func (m *HashMap) insert(hash int64, key []byte, val interface{}) (overwritten b
 
 	// Continue searching until we find an empty slot or lower probe distance.
 	for {
+		atomic.AddInt64(&m.statistics.PutProbes, 1)
 		e := &m.elems[pos]
 
 		// Empty slot found or matching key, insert and exit.
@@ -82,6 +133,7 @@ func (m *HashMap) insert(hash int64, key []byte, val interface{}) (overwritten b
 		// existing elem, and keep going to find another slot for that elem.
 		elemDist := Dist(m.hashes[pos], pos, m.capacity)
 		if elemDist < dist {
+			atomic.AddInt64(&m.statistics.Swaps, 1)
 			// Swap with current position.
 			hash, m.hashes[pos] = m.hashes[pos], hash
 			val, e.value = e.value, val
@@ -108,6 +160,8 @@ func (m *HashMap) alloc() {
 	m.hashes = make([]int64, m.capacity)
 	m.threshold = (m.capacity * int64(m.loadFactor)) / 100
 	m.mask = int64(m.capacity - 1)
+
+	atomic.StoreInt64(&m.statistics.Threshold, m.threshold)
 }
 
 // grow doubles the capacity and reinserts all existing hashes & elements.
@@ -119,6 +173,7 @@ func (m *HashMap) grow() {
 	// Double capacity & reallocate.
 	m.capacity *= 2
 	m.alloc()
+	atomic.StoreInt64(&m.statistics.Capacity, m.capacity)
 
 	// Copy old elements to new hash/elem list.
 	for i := int64(0); i < capacity; i++ {
@@ -137,6 +192,7 @@ func (m *HashMap) index(key []byte) int64 {
 
 	var dist int64
 	for {
+		atomic.AddInt64(&m.statistics.GetProbes, 1)
 		if m.hashes[pos] == 0 {
 			return -1
 		} else if dist > Dist(m.hashes[pos], pos, m.capacity) {
