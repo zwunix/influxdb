@@ -695,7 +695,7 @@ func {{.name}}Count(itr query.{{.Name}}Iterator, x []int64Time, opt query.Iterat
 			continue
 		}
 
-		for p.Time > end {
+		for p.Time >= end {
 			i++
 			if i >= len(x) {
 				return nil

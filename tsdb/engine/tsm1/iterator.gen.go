@@ -697,7 +697,7 @@ func floatCount(itr query.FloatIterator, x []int64Time, opt query.IteratorOption
 			continue
 		}
 
-		for p.Time > end {
+		for p.Time >= end {
 			i++
 			if i >= len(x) {
 				return nil
@@ -1276,7 +1276,7 @@ func integerCount(itr query.IntegerIterator, x []int64Time, opt query.IteratorOp
 			continue
 		}
 
-		for p.Time > end {
+		for p.Time >= end {
 			i++
 			if i >= len(x) {
 				return nil
@@ -1855,7 +1855,7 @@ func unsignedCount(itr query.UnsignedIterator, x []int64Time, opt query.Iterator
 			continue
 		}
 
-		for p.Time > end {
+		for p.Time >= end {
 			i++
 			if i >= len(x) {
 				return nil
@@ -2434,7 +2434,7 @@ func stringCount(itr query.StringIterator, x []int64Time, opt query.IteratorOpti
 			continue
 		}
 
-		for p.Time > end {
+		for p.Time >= end {
 			i++
 			if i >= len(x) {
 				return nil
@@ -3013,7 +3013,7 @@ func booleanCount(itr query.BooleanIterator, x []int64Time, opt query.IteratorOp
 			continue
 		}
 
-		for p.Time > end {
+		for p.Time >= end {
 			i++
 			if i >= len(x) {
 				return nil

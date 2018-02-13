@@ -2295,7 +2295,7 @@ func (e *Engine) createCountIterator(ctx context.Context, ref *influxql.VarRef, 
 			}
 		}
 
-		pool := buffer.NewPool(runtime.GOMAXPROCS(0))
+		pool := buffer.NewPool(maxprocs)
 		pool.New = func() interface{} {
 			return make([]int64Time, intervals)
 		}
@@ -2355,7 +2355,8 @@ func (e *Engine) createCountIterator(ctx context.Context, ref *influxql.VarRef, 
 				})
 			}
 
-			// Add the merged iterator to the
+			// Add the merged iterator to the list of concatenated iterators
+			// so the results can be read.
 			if err := itr.Add(ctx, merger); err != nil {
 				return
 			}
