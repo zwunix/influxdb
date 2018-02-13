@@ -995,6 +995,100 @@ func (itr *{{$k.name}}CloseInterruptIterator) Next() (*{{$k.Name}}Point, error) 
 	return p, nil
 }
 
+type {{$k.name}}ConcatIterator struct {
+	itr {{$k.Name}}Iterator
+	itrs chan {{$k.Name}}Iterator
+	mu sync.Mutex
+	ctx context.Context
+	cancel func()
+	init bool
+}
+
+func new{{$k.Name}}ConcatIterator(sz int) *{{$k.name}}ConcatIterator {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &{{$k.name}}ConcatIterator{
+		itrs: make(chan {{$k.Name}}Iterator, sz),
+		ctx: ctx,
+		cancel: cancel,
+	}
+}
+
+func (itr *{{$k.name}}ConcatIterator) Next() (*{{$k.Name}}Point, error) {
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	// Initialize the iterator using the first added iterator.
+	if !itr.init {
+		itr.mu.Unlock()
+		select {
+		case first := <-itr.itrs:
+			itr.mu.Lock()
+			itr.init = true
+			itr.itr = first
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+
+	for itr.itr != nil {
+		p, err := itr.itr.Next()
+		if err != nil {
+			return nil, err
+		} else if p != nil {
+			return p, nil
+		}
+
+		// Iterator is empty. Retrieve the next one.
+		select {
+		case itr.itr = <-itr.itrs:
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+	return nil, nil
+}
+
+func (itr *{{$k.name}}ConcatIterator) Add(ctx context.Context, input Iterator) error {
+	i, ok := input.({{$k.Name}}Iterator)
+	if !ok {
+		panic("cannot add iterator because it is not the correct type")
+	}
+
+	select {
+	case <-itr.ctx.Done():
+		return itr.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	case itr.itrs <- i:
+		return nil
+	}
+}
+
+func (itr *{{$k.name}}ConcatIterator) Done() {
+	close(itr.itrs)
+}
+
+func (itr *{{$k.name}}ConcatIterator) Close() error {
+	// Cancel the internal context to free a pending Next call
+	// and release the lock.
+	itr.cancel()
+
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	if itr.itr != nil {
+		if err := itr.itr.Close(); err != nil {
+			return err
+		}
+		itr.itr = nil
+	}
+	return nil
+}
+
+func (itr *{{$k.name}}ConcatIterator) Stats() IteratorStats {
+	return IteratorStats{}
+}
+
 {{range $v := $types}}
 
 // {{$k.name}}Reduce{{$v.Name}}Iterator executes a reducer for every interval and buffers the result.

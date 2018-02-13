@@ -993,6 +993,100 @@ func (itr *floatCloseInterruptIterator) Next() (*FloatPoint, error) {
 	return p, nil
 }
 
+type floatConcatIterator struct {
+	itr    FloatIterator
+	itrs   chan FloatIterator
+	mu     sync.Mutex
+	ctx    context.Context
+	cancel func()
+	init   bool
+}
+
+func newFloatConcatIterator(sz int) *floatConcatIterator {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &floatConcatIterator{
+		itrs:   make(chan FloatIterator, sz),
+		ctx:    ctx,
+		cancel: cancel,
+	}
+}
+
+func (itr *floatConcatIterator) Next() (*FloatPoint, error) {
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	// Initialize the iterator using the first added iterator.
+	if !itr.init {
+		itr.mu.Unlock()
+		select {
+		case first := <-itr.itrs:
+			itr.mu.Lock()
+			itr.init = true
+			itr.itr = first
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+
+	for itr.itr != nil {
+		p, err := itr.itr.Next()
+		if err != nil {
+			return nil, err
+		} else if p != nil {
+			return p, nil
+		}
+
+		// Iterator is empty. Retrieve the next one.
+		select {
+		case itr.itr = <-itr.itrs:
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+	return nil, nil
+}
+
+func (itr *floatConcatIterator) Add(ctx context.Context, input Iterator) error {
+	i, ok := input.(FloatIterator)
+	if !ok {
+		panic("cannot add iterator because it is not the correct type")
+	}
+
+	select {
+	case <-itr.ctx.Done():
+		return itr.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	case itr.itrs <- i:
+		return nil
+	}
+}
+
+func (itr *floatConcatIterator) Done() {
+	close(itr.itrs)
+}
+
+func (itr *floatConcatIterator) Close() error {
+	// Cancel the internal context to free a pending Next call
+	// and release the lock.
+	itr.cancel()
+
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	if itr.itr != nil {
+		if err := itr.itr.Close(); err != nil {
+			return err
+		}
+		itr.itr = nil
+	}
+	return nil
+}
+
+func (itr *floatConcatIterator) Stats() IteratorStats {
+	return IteratorStats{}
+}
+
 // floatReduceFloatIterator executes a reducer for every interval and buffers the result.
 type floatReduceFloatIterator struct {
 	input    *bufFloatIterator
@@ -3547,6 +3641,100 @@ func (itr *integerCloseInterruptIterator) Next() (*IntegerPoint, error) {
 		}
 	}
 	return p, nil
+}
+
+type integerConcatIterator struct {
+	itr    IntegerIterator
+	itrs   chan IntegerIterator
+	mu     sync.Mutex
+	ctx    context.Context
+	cancel func()
+	init   bool
+}
+
+func newIntegerConcatIterator(sz int) *integerConcatIterator {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &integerConcatIterator{
+		itrs:   make(chan IntegerIterator, sz),
+		ctx:    ctx,
+		cancel: cancel,
+	}
+}
+
+func (itr *integerConcatIterator) Next() (*IntegerPoint, error) {
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	// Initialize the iterator using the first added iterator.
+	if !itr.init {
+		itr.mu.Unlock()
+		select {
+		case first := <-itr.itrs:
+			itr.mu.Lock()
+			itr.init = true
+			itr.itr = first
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+
+	for itr.itr != nil {
+		p, err := itr.itr.Next()
+		if err != nil {
+			return nil, err
+		} else if p != nil {
+			return p, nil
+		}
+
+		// Iterator is empty. Retrieve the next one.
+		select {
+		case itr.itr = <-itr.itrs:
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+	return nil, nil
+}
+
+func (itr *integerConcatIterator) Add(ctx context.Context, input Iterator) error {
+	i, ok := input.(IntegerIterator)
+	if !ok {
+		panic("cannot add iterator because it is not the correct type")
+	}
+
+	select {
+	case <-itr.ctx.Done():
+		return itr.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	case itr.itrs <- i:
+		return nil
+	}
+}
+
+func (itr *integerConcatIterator) Done() {
+	close(itr.itrs)
+}
+
+func (itr *integerConcatIterator) Close() error {
+	// Cancel the internal context to free a pending Next call
+	// and release the lock.
+	itr.cancel()
+
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	if itr.itr != nil {
+		if err := itr.itr.Close(); err != nil {
+			return err
+		}
+		itr.itr = nil
+	}
+	return nil
+}
+
+func (itr *integerConcatIterator) Stats() IteratorStats {
+	return IteratorStats{}
 }
 
 // integerReduceFloatIterator executes a reducer for every interval and buffers the result.
@@ -6105,6 +6293,100 @@ func (itr *unsignedCloseInterruptIterator) Next() (*UnsignedPoint, error) {
 	return p, nil
 }
 
+type unsignedConcatIterator struct {
+	itr    UnsignedIterator
+	itrs   chan UnsignedIterator
+	mu     sync.Mutex
+	ctx    context.Context
+	cancel func()
+	init   bool
+}
+
+func newUnsignedConcatIterator(sz int) *unsignedConcatIterator {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &unsignedConcatIterator{
+		itrs:   make(chan UnsignedIterator, sz),
+		ctx:    ctx,
+		cancel: cancel,
+	}
+}
+
+func (itr *unsignedConcatIterator) Next() (*UnsignedPoint, error) {
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	// Initialize the iterator using the first added iterator.
+	if !itr.init {
+		itr.mu.Unlock()
+		select {
+		case first := <-itr.itrs:
+			itr.mu.Lock()
+			itr.init = true
+			itr.itr = first
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+
+	for itr.itr != nil {
+		p, err := itr.itr.Next()
+		if err != nil {
+			return nil, err
+		} else if p != nil {
+			return p, nil
+		}
+
+		// Iterator is empty. Retrieve the next one.
+		select {
+		case itr.itr = <-itr.itrs:
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+	return nil, nil
+}
+
+func (itr *unsignedConcatIterator) Add(ctx context.Context, input Iterator) error {
+	i, ok := input.(UnsignedIterator)
+	if !ok {
+		panic("cannot add iterator because it is not the correct type")
+	}
+
+	select {
+	case <-itr.ctx.Done():
+		return itr.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	case itr.itrs <- i:
+		return nil
+	}
+}
+
+func (itr *unsignedConcatIterator) Done() {
+	close(itr.itrs)
+}
+
+func (itr *unsignedConcatIterator) Close() error {
+	// Cancel the internal context to free a pending Next call
+	// and release the lock.
+	itr.cancel()
+
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	if itr.itr != nil {
+		if err := itr.itr.Close(); err != nil {
+			return err
+		}
+		itr.itr = nil
+	}
+	return nil
+}
+
+func (itr *unsignedConcatIterator) Stats() IteratorStats {
+	return IteratorStats{}
+}
+
 // unsignedReduceFloatIterator executes a reducer for every interval and buffers the result.
 type unsignedReduceFloatIterator struct {
 	input    *bufUnsignedIterator
@@ -8647,6 +8929,100 @@ func (itr *stringCloseInterruptIterator) Next() (*StringPoint, error) {
 	return p, nil
 }
 
+type stringConcatIterator struct {
+	itr    StringIterator
+	itrs   chan StringIterator
+	mu     sync.Mutex
+	ctx    context.Context
+	cancel func()
+	init   bool
+}
+
+func newStringConcatIterator(sz int) *stringConcatIterator {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &stringConcatIterator{
+		itrs:   make(chan StringIterator, sz),
+		ctx:    ctx,
+		cancel: cancel,
+	}
+}
+
+func (itr *stringConcatIterator) Next() (*StringPoint, error) {
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	// Initialize the iterator using the first added iterator.
+	if !itr.init {
+		itr.mu.Unlock()
+		select {
+		case first := <-itr.itrs:
+			itr.mu.Lock()
+			itr.init = true
+			itr.itr = first
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+
+	for itr.itr != nil {
+		p, err := itr.itr.Next()
+		if err != nil {
+			return nil, err
+		} else if p != nil {
+			return p, nil
+		}
+
+		// Iterator is empty. Retrieve the next one.
+		select {
+		case itr.itr = <-itr.itrs:
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+	return nil, nil
+}
+
+func (itr *stringConcatIterator) Add(ctx context.Context, input Iterator) error {
+	i, ok := input.(StringIterator)
+	if !ok {
+		panic("cannot add iterator because it is not the correct type")
+	}
+
+	select {
+	case <-itr.ctx.Done():
+		return itr.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	case itr.itrs <- i:
+		return nil
+	}
+}
+
+func (itr *stringConcatIterator) Done() {
+	close(itr.itrs)
+}
+
+func (itr *stringConcatIterator) Close() error {
+	// Cancel the internal context to free a pending Next call
+	// and release the lock.
+	itr.cancel()
+
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	if itr.itr != nil {
+		if err := itr.itr.Close(); err != nil {
+			return err
+		}
+		itr.itr = nil
+	}
+	return nil
+}
+
+func (itr *stringConcatIterator) Stats() IteratorStats {
+	return IteratorStats{}
+}
+
 // stringReduceFloatIterator executes a reducer for every interval and buffers the result.
 type stringReduceFloatIterator struct {
 	input    *bufStringIterator
@@ -11187,6 +11563,100 @@ func (itr *booleanCloseInterruptIterator) Next() (*BooleanPoint, error) {
 		}
 	}
 	return p, nil
+}
+
+type booleanConcatIterator struct {
+	itr    BooleanIterator
+	itrs   chan BooleanIterator
+	mu     sync.Mutex
+	ctx    context.Context
+	cancel func()
+	init   bool
+}
+
+func newBooleanConcatIterator(sz int) *booleanConcatIterator {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &booleanConcatIterator{
+		itrs:   make(chan BooleanIterator, sz),
+		ctx:    ctx,
+		cancel: cancel,
+	}
+}
+
+func (itr *booleanConcatIterator) Next() (*BooleanPoint, error) {
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	// Initialize the iterator using the first added iterator.
+	if !itr.init {
+		itr.mu.Unlock()
+		select {
+		case first := <-itr.itrs:
+			itr.mu.Lock()
+			itr.init = true
+			itr.itr = first
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+
+	for itr.itr != nil {
+		p, err := itr.itr.Next()
+		if err != nil {
+			return nil, err
+		} else if p != nil {
+			return p, nil
+		}
+
+		// Iterator is empty. Retrieve the next one.
+		select {
+		case itr.itr = <-itr.itrs:
+		case <-itr.ctx.Done():
+			return nil, nil
+		}
+	}
+	return nil, nil
+}
+
+func (itr *booleanConcatIterator) Add(ctx context.Context, input Iterator) error {
+	i, ok := input.(BooleanIterator)
+	if !ok {
+		panic("cannot add iterator because it is not the correct type")
+	}
+
+	select {
+	case <-itr.ctx.Done():
+		return itr.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	case itr.itrs <- i:
+		return nil
+	}
+}
+
+func (itr *booleanConcatIterator) Done() {
+	close(itr.itrs)
+}
+
+func (itr *booleanConcatIterator) Close() error {
+	// Cancel the internal context to free a pending Next call
+	// and release the lock.
+	itr.cancel()
+
+	itr.mu.Lock()
+	defer itr.mu.Unlock()
+
+	if itr.itr != nil {
+		if err := itr.itr.Close(); err != nil {
+			return err
+		}
+		itr.itr = nil
+	}
+	return nil
+}
+
+func (itr *booleanConcatIterator) Stats() IteratorStats {
+	return IteratorStats{}
 }
 
 // booleanReduceFloatIterator executes a reducer for every interval and buffers the result.
