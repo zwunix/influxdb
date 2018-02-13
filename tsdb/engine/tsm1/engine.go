@@ -2297,18 +2297,26 @@ func (e *Engine) createCountIterator(ctx context.Context, ref *influxql.VarRef, 
 
 		pool := buffer.NewPool(runtime.GOMAXPROCS(0))
 		pool.New = func() interface{} {
-			return make([]int64, intervals)
+			return make([]int64Time, intervals)
+		}
+
+		buffer := make([]int64Time, intervals)
+		for i := range buffer {
+			buffer[i].Time = query.ZeroTime
 		}
 
 		start, _ := opt.Window(opt.StartTime)
 		for _, t := range tagSets {
 			merger := &integerMergeIterator{
-				merge: func(data, buffer []int64) {
+				merge: func(data, buffer []int64Time) {
 					for i := range data {
-						data[i] += buffer[i]
+						if buffer[i].Time != query.ZeroTime {
+							data[i].Value += buffer[i].Value
+							data[i].Time = buffer[i].Time
+						}
 					}
 				},
-				buffer: make([]int64, intervals),
+				buffer: buffer,
 				pool:   pool,
 				point: query.IntegerPoint{
 					Name: measurement,
@@ -2329,7 +2337,8 @@ func (e *Engine) createCountIterator(ctx context.Context, ref *influxql.VarRef, 
 				if cur == nil {
 					continue
 				}
-				merger.Add(ctx, func(data []int64) error {
+				merger.Add(ctx, func(data []int64Time) error {
+					defer cur.Close()
 					switch cur := cur.(type) {
 					case query.FloatIterator:
 						return floatCount(cur, data, opt)

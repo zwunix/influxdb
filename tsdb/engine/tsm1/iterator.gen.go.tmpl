@@ -351,11 +351,16 @@ func (itr *{{.name}}LimitIterator) Next() (*query.{{.Name}}Point, error) {
 	return p, nil
 }
 
-type {{.name}}MergeFunc func([]{{.Type}}, []{{.Type}})
+type {{.Type}}Time struct {
+	Value {{.Type}}
+	Time  int64
+}
+
+type {{.name}}MergeFunc func([]{{.Type}}Time, []{{.Type}}Time)
 
 type {{.name}}MergeIterator struct {
 	merge  {{.name}}MergeFunc
-	buffer []{{.Type}}
+	buffer []{{.Type}}Time
 	pool   *buffer.Pool
 	wg     sync.WaitGroup
 	mu     sync.Mutex
@@ -365,15 +370,16 @@ type {{.name}}MergeIterator struct {
 	err    error
 }
 
-func (itr *{{.name}}MergeIterator) Add(ctx context.Context, fn func([]{{.Type}}) error) {
+func (itr *{{.name}}MergeIterator) Add(ctx context.Context, fn func([]{{.Type}}Time) error) {
 	buf, ok := itr.pool.Get(ctx)
 	if !ok {
 		return
 	}
 
-	buffer := buf.([]{{.Type}})
+	buffer := buf.([]{{.Type}}Time)
 	for i := range buffer {
-		buffer[i] = {{.Nil}}
+		buffer[i].Value = {{.Nil}}
+		buffer[i].Time = query.ZeroTime
 	}
 
 	itr.wg.Add(1)
@@ -399,19 +405,23 @@ func (itr *{{.name}}MergeIterator) Next() (*query.{{.Name}}Point, error) {
 		if itr.err != nil {
 			return nil, itr.err
 		}
-	}
-
-	if len(itr.buffer) == 0 {
-		return nil, nil
-	}
-	itr.point.Value = itr.buffer[0]
-	if itr.init {
-		_, itr.point.Time = itr.opt.Window(itr.point.Time)
-	} else {
 		itr.init = true
 	}
-	itr.buffer = itr.buffer[1:]
-	return &itr.point, nil
+
+	for {
+		if len(itr.buffer) == 0 {
+			return nil, nil
+		}
+
+		p := itr.buffer[0]
+		itr.buffer = itr.buffer[1:]
+		if p.Time == query.ZeroTime {
+			continue
+		}
+		itr.point.Value = p.Value
+		itr.point.Time = p.Time
+		return &itr.point, nil
+	}
 }
 
 func (itr *{{.name}}MergeIterator) Close() error {
@@ -671,7 +681,7 @@ func (c *{{.name}}DescendingCursor) nextTSM() {
 	}
 }
 
-func {{.name}}Count(itr query.{{.Name}}Iterator, x []int64, opt query.IteratorOptions) error {
+func {{.name}}Count(itr query.{{.Name}}Iterator, x []int64Time, opt query.IteratorOptions) error {
 	start, end := opt.Window(opt.StartTime)
 	for i := 0; ; {
 		p, err := itr.Next()
@@ -688,11 +698,12 @@ func {{.name}}Count(itr query.{{.Name}}Iterator, x []int64, opt query.IteratorOp
 		for p.Time > end {
 			i++
 			if i >= len(x) {
-				return itr.Close()
+				return nil
 			}
 			start, end = opt.Window(end)
 		}
-		x[i]++
+		x[i].Value++
+		x[i].Time = start
 	}
 }
 
