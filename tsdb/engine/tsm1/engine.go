@@ -22,6 +22,7 @@ import (
 
 	"github.com/influxdata/influxdb/logger"
 	"github.com/influxdata/influxdb/models"
+	"github.com/influxdata/influxdb/pkg/buffer"
 	"github.com/influxdata/influxdb/pkg/bytesutil"
 	"github.com/influxdata/influxdb/pkg/estimator"
 	"github.com/influxdata/influxdb/pkg/limiter"
@@ -2228,6 +2229,11 @@ func (e *Engine) createCallIterator(ctx context.Context, measurement string, cal
 	// Calculate tag sets and apply SLIMIT/SOFFSET.
 	tagSets = query.LimitTagSets(tagSets, opt.SLimit, opt.SOffset)
 
+	if call.Name == "count" {
+		itr := e.createCountIterator(ctx, ref, measurement, tagSets, opt)
+		return []query.Iterator{itr}, nil
+	}
+
 	itrs := make([]query.Iterator, 0, len(tagSets))
 	if err := func() error {
 		for _, t := range tagSets {
@@ -2270,6 +2276,83 @@ func (e *Engine) createCallIterator(ctx context.Context, measurement string, cal
 	}
 
 	return itrs, nil
+}
+
+func (e *Engine) createCountIterator(ctx context.Context, ref *influxql.VarRef, measurement string, tagSets []*query.TagSet, opt query.IteratorOptions) query.Iterator {
+	maxprocs := runtime.GOMAXPROCS(0)
+	itr := query.NewConcatIterator(maxprocs, influxql.Integer)
+	go func() {
+		defer itr.Done()
+
+		var intervals int
+		if opt.Interval.IsZero() {
+			intervals = 1
+		} else {
+			start, end := opt.Window(opt.StartTime)
+			for start <= opt.EndTime {
+				intervals++
+				start, end = opt.Window(end)
+			}
+		}
+
+		pool := buffer.NewPool(runtime.GOMAXPROCS(0))
+		pool.New = func() interface{} {
+			return make([]int64, intervals)
+		}
+
+		start, _ := opt.Window(opt.StartTime)
+		for _, t := range tagSets {
+			merger := &integerMergeIterator{
+				merge: func(data, buffer []int64) {
+					for i := range data {
+						data[i] += buffer[i]
+					}
+				},
+				buffer: make([]int64, intervals),
+				pool:   pool,
+				point: query.IntegerPoint{
+					Name: measurement,
+					Tags: query.NewTags(t.Tags),
+					Time: start,
+				},
+				opt: opt,
+			}
+
+			for i, seriesKey := range t.SeriesKeys {
+				var conditionFields []influxql.VarRef
+				if t.Filters[i] != nil {
+					// Retrieve non-time fields from this series filter and filter out tags.
+					conditionFields = influxql.ExprNames(t.Filters[i])
+				}
+
+				cur, _ := e.createVarRefSeriesIterator(ctx, ref, measurement, seriesKey, t, t.Filters[i], conditionFields, opt)
+				if cur == nil {
+					continue
+				}
+				merger.Add(ctx, func(data []int64) error {
+					switch cur := cur.(type) {
+					case query.FloatIterator:
+						return floatCount(cur, data, opt)
+					case query.IntegerIterator:
+						return integerCount(cur, data, opt)
+					case query.UnsignedIterator:
+						return unsignedCount(cur, data, opt)
+					case query.StringIterator:
+						return stringCount(cur, data, opt)
+					case query.BooleanIterator:
+						return booleanCount(cur, data, opt)
+					}
+					return fmt.Errorf("unsupport iterator type: %T", cur)
+				})
+			}
+
+			// Add the merged iterator to the
+			if err := itr.Add(ctx, merger); err != nil {
+				return
+			}
+		}
+	}()
+	return itr
 }
 
 // createVarRefIterator creates an iterator for a variable reference.

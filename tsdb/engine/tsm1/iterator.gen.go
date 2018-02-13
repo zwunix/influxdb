@@ -7,11 +7,13 @@
 package tsm1
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 	"sort"
 	"sync"
 
+	"github.com/influxdata/influxdb/pkg/buffer"
 	"github.com/influxdata/influxdb/pkg/metrics"
 	"github.com/influxdata/influxdb/pkg/tracing"
 	"github.com/influxdata/influxdb/pkg/tracing/fields"
@@ -351,6 +353,77 @@ func (itr *floatLimitIterator) Next() (*query.FloatPoint, error) {
 	return p, nil
 }
 
+type floatMergeFunc func([]float64, []float64)
+
+type floatMergeIterator struct {
+	merge  floatMergeFunc
+	buffer []float64
+	pool   *buffer.Pool
+	wg     sync.WaitGroup
+	mu     sync.Mutex
+	point  query.FloatPoint
+	opt    query.IteratorOptions
+	init   bool
+	err    error
+}
+
+func (itr *floatMergeIterator) Add(ctx context.Context, fn func([]float64) error) {
+	buf, ok := itr.pool.Get(ctx)
+	if !ok {
+		return
+	}
+
+	buffer := buf.([]float64)
+	for i := range buffer {
+		buffer[i] = 0
+	}
+
+	itr.wg.Add(1)
+	go func() {
+		defer itr.wg.Done()
+		if err := fn(buffer); err != nil {
+			itr.mu.Lock()
+			itr.err = err
+			itr.mu.Unlock()
+			return
+		}
+
+		itr.mu.Lock()
+		defer itr.mu.Unlock()
+		itr.merge(itr.buffer, buffer)
+		itr.pool.Put(buffer)
+	}()
+}
+
+func (itr *floatMergeIterator) Next() (*query.FloatPoint, error) {
+	if !itr.init {
+		itr.wg.Wait()
+		if itr.err != nil {
+			return nil, itr.err
+		}
+	}
+
+	if len(itr.buffer) == 0 {
+		return nil, nil
+	}
+	itr.point.Value = itr.buffer[0]
+	if itr.init {
+		_, itr.point.Time = itr.opt.Window(itr.point.Time)
+	} else {
+		itr.init = true
+	}
+	itr.buffer = itr.buffer[1:]
+	return &itr.point, nil
+}
+
+func (itr *floatMergeIterator) Close() error {
+	return nil
+}
+
+func (itr *floatMergeIterator) Stats() query.IteratorStats {
+	return query.IteratorStats{}
+}
+
 // floatCursor represents an object for iterating over a single float field.
 type floatCursor interface {
 	cursor
@@ -600,6 +673,31 @@ func (c *floatDescendingCursor) nextTSM() {
 	}
 }
 
+func floatCount(itr query.FloatIterator, x []int64, opt query.IteratorOptions) error {
+	start, end := opt.Window(opt.StartTime)
+	for i := 0; ; {
+		p, err := itr.Next()
+		if err != nil {
+			return err
+		} else if p == nil {
+			return nil
+		}
+
+		if p.Time < start {
+			continue
+		}
+
+		for p.Time > end {
+			i++
+			if i >= len(x) {
+				return itr.Close()
+			}
+			start, end = opt.Window(end)
+		}
+		x[i]++
+	}
+}
+
 type integerFinalizerIterator struct {
 	query.IntegerIterator
 	logger *zap.Logger
@@ -821,6 +919,77 @@ func (itr *integerLimitIterator) Next() (*query.IntegerPoint, error) {
 
 	// Offsets are handled by a higher level iterator so return all points.
 	return p, nil
+}
+
+type integerMergeFunc func([]int64, []int64)
+
+type integerMergeIterator struct {
+	merge  integerMergeFunc
+	buffer []int64
+	pool   *buffer.Pool
+	wg     sync.WaitGroup
+	mu     sync.Mutex
+	point  query.IntegerPoint
+	opt    query.IteratorOptions
+	init   bool
+	err    error
+}
+
+func (itr *integerMergeIterator) Add(ctx context.Context, fn func([]int64) error) {
+	buf, ok := itr.pool.Get(ctx)
+	if !ok {
+		return
+	}
+
+	buffer := buf.([]int64)
+	for i := range buffer {
+		buffer[i] = 0
+	}
+
+	itr.wg.Add(1)
+	go func() {
+		defer itr.wg.Done()
+		if err := fn(buffer); err != nil {
+			itr.mu.Lock()
+			itr.err = err
+			itr.mu.Unlock()
+			return
+		}
+
+		itr.mu.Lock()
+		defer itr.mu.Unlock()
+		itr.merge(itr.buffer, buffer)
+		itr.pool.Put(buffer)
+	}()
+}
+
+func (itr *integerMergeIterator) Next() (*query.IntegerPoint, error) {
+	if !itr.init {
+		itr.wg.Wait()
+		if itr.err != nil {
+			return nil, itr.err
+		}
+	}
+
+	if len(itr.buffer) == 0 {
+		return nil, nil
+	}
+	itr.point.Value = itr.buffer[0]
+	if itr.init {
+		_, itr.point.Time = itr.opt.Window(itr.point.Time)
+	} else {
+		itr.init = true
+	}
+	itr.buffer = itr.buffer[1:]
+	return &itr.point, nil
+}
+
+func (itr *integerMergeIterator) Close() error {
+	return nil
+}
+
+func (itr *integerMergeIterator) Stats() query.IteratorStats {
+	return query.IteratorStats{}
 }
 
 // integerCursor represents an object for iterating over a single integer field.
@@ -1072,6 +1241,31 @@ func (c *integerDescendingCursor) nextTSM() {
 	}
 }
 
+func integerCount(itr query.IntegerIterator, x []int64, opt query.IteratorOptions) error {
+	start, end := opt.Window(opt.StartTime)
+	for i := 0; ; {
+		p, err := itr.Next()
+		if err != nil {
+			return err
+		} else if p == nil {
+			return nil
+		}
+
+		if p.Time < start {
+			continue
+		}
+
+		for p.Time > end {
+			i++
+			if i >= len(x) {
+				return itr.Close()
+			}
+			start, end = opt.Window(end)
+		}
+		x[i]++
+	}
+}
+
 type unsignedFinalizerIterator struct {
 	query.UnsignedIterator
 	logger *zap.Logger
@@ -1293,6 +1487,77 @@ func (itr *unsignedLimitIterator) Next() (*query.UnsignedPoint, error) {
 
 	// Offsets are handled by a higher level iterator so return all points.
 	return p, nil
+}
+
+type unsignedMergeFunc func([]uint64, []uint64)
+
+type unsignedMergeIterator struct {
+	merge  unsignedMergeFunc
+	buffer []uint64
+	pool   *buffer.Pool
+	wg     sync.WaitGroup
+	mu     sync.Mutex
+	point  query.UnsignedPoint
+	opt    query.IteratorOptions
+	init   bool
+	err    error
+}
+
+func (itr *unsignedMergeIterator) Add(ctx context.Context, fn func([]uint64) error) {
+	buf, ok := itr.pool.Get(ctx)
+	if !ok {
+		return
+	}
+
+	buffer := buf.([]uint64)
+	for i := range buffer {
+		buffer[i] = 0
+	}
+
+	itr.wg.Add(1)
+	go func() {
+		defer itr.wg.Done()
+		if err := fn(buffer); err != nil {
+			itr.mu.Lock()
+			itr.err = err
+			itr.mu.Unlock()
+			return
+		}
+
+		itr.mu.Lock()
+		defer itr.mu.Unlock()
+		itr.merge(itr.buffer, buffer)
+		itr.pool.Put(buffer)
+	}()
+}
+
+func (itr *unsignedMergeIterator) Next() (*query.UnsignedPoint, error) {
+	if !itr.init {
+		itr.wg.Wait()
+		if itr.err != nil {
+			return nil, itr.err
+		}
+	}
+
+	if len(itr.buffer) == 0 {
+		return nil, nil
+	}
+	itr.point.Value = itr.buffer[0]
+	if itr.init {
+		_, itr.point.Time = itr.opt.Window(itr.point.Time)
+	} else {
+		itr.init = true
+	}
+	itr.buffer = itr.buffer[1:]
+	return &itr.point, nil
+}
+
+func (itr *unsignedMergeIterator) Close() error {
+	return nil
+}
+
+func (itr *unsignedMergeIterator) Stats() query.IteratorStats {
+	return query.IteratorStats{}
 }
 
 // unsignedCursor represents an object for iterating over a single unsigned field.
@@ -1544,6 +1809,31 @@ func (c *unsignedDescendingCursor) nextTSM() {
 	}
 }
 
+func unsignedCount(itr query.UnsignedIterator, x []int64, opt query.IteratorOptions) error {
+	start, end := opt.Window(opt.StartTime)
+	for i := 0; ; {
+		p, err := itr.Next()
+		if err != nil {
+			return err
+		} else if p == nil {
+			return nil
+		}
+
+		if p.Time < start {
+			continue
+		}
+
+		for p.Time > end {
+			i++
+			if i >= len(x) {
+				return itr.Close()
+			}
+			start, end = opt.Window(end)
+		}
+		x[i]++
+	}
+}
+
 type stringFinalizerIterator struct {
 	query.StringIterator
 	logger *zap.Logger
@@ -1765,6 +2055,77 @@ func (itr *stringLimitIterator) Next() (*query.StringPoint, error) {
 
 	// Offsets are handled by a higher level iterator so return all points.
 	return p, nil
+}
+
+type stringMergeFunc func([]string, []string)
+
+type stringMergeIterator struct {
+	merge  stringMergeFunc
+	buffer []string
+	pool   *buffer.Pool
+	wg     sync.WaitGroup
+	mu     sync.Mutex
+	point  query.StringPoint
+	opt    query.IteratorOptions
+	init   bool
+	err    error
+}
+
+func (itr *stringMergeIterator) Add(ctx context.Context, fn func([]string) error) {
+	buf, ok := itr.pool.Get(ctx)
+	if !ok {
+		return
+	}
+
+	buffer := buf.([]string)
+	for i := range buffer {
+		buffer[i] = ""
+	}
+
+	itr.wg.Add(1)
+	go func() {
+		defer itr.wg.Done()
+		if err := fn(buffer); err != nil {
+			itr.mu.Lock()
+			itr.err = err
+			itr.mu.Unlock()
+			return
+		}
+
+		itr.mu.Lock()
+		defer itr.mu.Unlock()
+		itr.merge(itr.buffer, buffer)
+		itr.pool.Put(buffer)
+	}()
+}
+
+func (itr *stringMergeIterator) Next() (*query.StringPoint, error) {
+	if !itr.init {
+		itr.wg.Wait()
+		if itr.err != nil {
+			return nil, itr.err
+		}
+	}
+
+	if len(itr.buffer) == 0 {
+		return nil, nil
+	}
+	itr.point.Value = itr.buffer[0]
+	if itr.init {
+		_, itr.point.Time = itr.opt.Window(itr.point.Time)
+	} else {
+		itr.init = true
+	}
+	itr.buffer = itr.buffer[1:]
+	return &itr.point, nil
+}
+
+func (itr *stringMergeIterator) Close() error {
+	return nil
+}
+
+func (itr *stringMergeIterator) Stats() query.IteratorStats {
+	return query.IteratorStats{}
 }
 
 // stringCursor represents an object for iterating over a single string field.
@@ -2016,6 +2377,31 @@ func (c *stringDescendingCursor) nextTSM() {
 	}
 }
 
+func stringCount(itr query.StringIterator, x []int64, opt query.IteratorOptions) error {
+	start, end := opt.Window(opt.StartTime)
+	for i := 0; ; {
+		p, err := itr.Next()
+		if err != nil {
+			return err
+		} else if p == nil {
+			return nil
+		}
+
+		if p.Time < start {
+			continue
+		}
+
+		for p.Time > end {
+			i++
+			if i >= len(x) {
+				return itr.Close()
+			}
+			start, end = opt.Window(end)
+		}
+		x[i]++
+	}
+}
+
 type booleanFinalizerIterator struct {
 	query.BooleanIterator
 	logger *zap.Logger
@@ -2237,6 +2623,77 @@ func (itr *booleanLimitIterator) Next() (*query.BooleanPoint, error) {
 
 	// Offsets are handled by a higher level iterator so return all points.
 	return p, nil
+}
+
+type booleanMergeFunc func([]bool, []bool)
+
+type booleanMergeIterator struct {
+	merge  booleanMergeFunc
+	buffer []bool
+	pool   *buffer.Pool
+	wg     sync.WaitGroup
+	mu     sync.Mutex
+	point  query.BooleanPoint
+	opt    query.IteratorOptions
+	init   bool
+	err    error
+}
+
+func (itr *booleanMergeIterator) Add(ctx context.Context, fn func([]bool) error) {
+	buf, ok := itr.pool.Get(ctx)
+	if !ok {
+		return
+	}
+
+	buffer := buf.([]bool)
+	for i := range buffer {
+		buffer[i] = false
+	}
+
+	itr.wg.Add(1)
+	go func() {
+		defer itr.wg.Done()
+		if err := fn(buffer); err != nil {
+			itr.mu.Lock()
+			itr.err = err
+			itr.mu.Unlock()
+			return
+		}
+
+		itr.mu.Lock()
+		defer itr.mu.Unlock()
+		itr.merge(itr.buffer, buffer)
+		itr.pool.Put(buffer)
+	}()
+}
+
+func (itr *booleanMergeIterator) Next() (*query.BooleanPoint, error) {
+	if !itr.init {
+		itr.wg.Wait()
+		if itr.err != nil {
+			return nil, itr.err
+		}
+	}
+
+	if len(itr.buffer) == 0 {
+		return nil, nil
+	}
+	itr.point.Value = itr.buffer[0]
+	if itr.init {
+		_, itr.point.Time = itr.opt.Window(itr.point.Time)
+	} else {
+		itr.init = true
+	}
+	itr.buffer = itr.buffer[1:]
+	return &itr.point, nil
+}
+
+func (itr *booleanMergeIterator) Close() error {
+	return nil
+}
+
+func (itr *booleanMergeIterator) Stats() query.IteratorStats {
+	return query.IteratorStats{}
 }
 
 // booleanCursor represents an object for iterating over a single boolean field.
@@ -2485,6 +2942,31 @@ func (c *booleanDescendingCursor) nextTSM() {
 			return
 		}
 		c.tsm.pos = len(c.tsm.values) - 1
+	}
+}
+
+func booleanCount(itr query.BooleanIterator, x []int64, opt query.IteratorOptions) error {
+	start, end := opt.Window(opt.StartTime)
+	for i := 0; ; {
+		p, err := itr.Next()
+		if err != nil {
+			return err
+		} else if p == nil {
+			return nil
+		}
+
+		if p.Time < start {
+			continue
+		}
+
+		for p.Time > end {
+			i++
+			if i >= len(x) {
+				return itr.Close()
+			}
+			start, end = opt.Window(end)
+		}
+		x[i]++
 	}
 }
 

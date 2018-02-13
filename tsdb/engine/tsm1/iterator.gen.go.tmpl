@@ -1,11 +1,13 @@
 package tsm1
 
 import (
+	"context"
 	"sort"
 	"fmt"
 	"runtime"
 	"sync"
 
+	"github.com/influxdata/influxdb/pkg/buffer"
 	"github.com/influxdata/influxdb/pkg/metrics"
 	"github.com/influxdata/influxdb/pkg/tracing"
 	"github.com/influxdata/influxdb/pkg/tracing/fields"
@@ -349,6 +351,77 @@ func (itr *{{.name}}LimitIterator) Next() (*query.{{.Name}}Point, error) {
 	return p, nil
 }
 
+type {{.name}}MergeFunc func([]{{.Type}}, []{{.Type}})
+
+type {{.name}}MergeIterator struct {
+	merge  {{.name}}MergeFunc
+	buffer []{{.Type}}
+	pool   *buffer.Pool
+	wg     sync.WaitGroup
+	mu     sync.Mutex
+	point  query.{{.Name}}Point
+	opt    query.IteratorOptions
+	init   bool
+	err    error
+}
+
+func (itr *{{.name}}MergeIterator) Add(ctx context.Context, fn func([]{{.Type}}) error) {
+	buf, ok := itr.pool.Get(ctx)
+	if !ok {
+		return
+	}
+
+	buffer := buf.([]{{.Type}})
+	for i := range buffer {
+		buffer[i] = {{.Nil}}
+	}
+
+	itr.wg.Add(1)
+	go func() {
+		defer itr.wg.Done()
+		if err := fn(buffer); err != nil {
+			itr.mu.Lock()
+			itr.err = err
+			itr.mu.Unlock()
+			return
+		}
+
+		itr.mu.Lock()
+		defer itr.mu.Unlock()
+		itr.merge(itr.buffer, buffer)
+		itr.pool.Put(buffer)
+	}()
+}
+
+func (itr *{{.name}}MergeIterator) Next() (*query.{{.Name}}Point, error) {
+	if !itr.init {
+		itr.wg.Wait()
+		if itr.err != nil {
+			return nil, itr.err
+		}
+	}
+
+	if len(itr.buffer) == 0 {
+		return nil, nil
+	}
+	itr.point.Value = itr.buffer[0]
+	if itr.init {
+		_, itr.point.Time = itr.opt.Window(itr.point.Time)
+	} else {
+		itr.init = true
+	}
+	itr.buffer = itr.buffer[1:]
+	return &itr.point, nil
+}
+
+func (itr *{{.name}}MergeIterator) Close() error {
+	return nil
+}
+
+func (itr *{{.name}}MergeIterator) Stats() query.IteratorStats {
+	return query.IteratorStats{}
+}
+
 // {{.name}}Cursor represents an object for iterating over a single {{.name}} field.
 type {{.name}}Cursor interface {
 	cursor
@@ -595,6 +668,31 @@ func (c *{{.name}}DescendingCursor) nextTSM() {
 			return
 		}
 		c.tsm.pos = len(c.tsm.values) - 1
+	}
+}
+
+func {{.name}}Count(itr query.{{.Name}}Iterator, x []int64, opt query.IteratorOptions) error {
+	start, end := opt.Window(opt.StartTime)
+	for i := 0; ; {
+		p, err := itr.Next()
+		if err != nil {
+			return err
+		} else if p == nil {
+			return nil
+		}
+
+		if p.Time < start {
+			continue
+		}
+
+		for p.Time > end {
+			i++
+			if i >= len(x) {
+				return itr.Close()
+			}
+			start, end = opt.Window(end)
+		}
+		x[i]++
 	}
 }
 
