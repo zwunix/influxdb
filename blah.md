@@ -5,6 +5,21 @@ I did an analysis on some series files. The index is not a significant portion o
 
 I have a branch pushed with some work on compressing the segment files. It will be able to read old files but only write new files with compression.
 
+# Results
+
+| strategy       | vals/sec          | seconds        | ratio | memory   | series file size |
+|----------------|-------------------|----------------|-------|----------|------------------|
+| no compression | 80829.1 val/sec.  | 371.2 seconds  | 1x    | 9.61GB   | 3.1GB            |
+| compression    | 105671.9 val/sec. | 283.9 seconds  | 0.76x | 11.3GB ? | 1.5GB            |
+
+note: these numbers are for a sparse filesystem. if not sparse, no compression is 6.1GB and compressed is 2GB
+
+i'm seeing lz4 compress to about 25% of the original size, and the silly caching i did works apparently over 99% of the time on the inch workload. i suspect it wont stay that good in other workloads but i also think we can do smarter things. i noticed that with compressed segments, index compactions seem to go way faster and take less time. maybe we don't need to do anything there.
+
+memory usage is a bit higher. i think it can be reduced. i'm being kinda dumb with both the buffer size as well as how long i hold on to said buffers.
+
+lastly, it's all implemented in a backward compatible way that's also easy to turn off.
+
 # Long stream of consiousness spew with details
 
 #### Stats per partition

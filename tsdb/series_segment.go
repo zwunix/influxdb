@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/influxdata/influxdb/pkg/mmap"
@@ -199,12 +200,22 @@ func (s *SeriesSegment) ID() uint16 { return s.id }
 // This is only populated once InitForWrite() is called.
 func (s *SeriesSegment) Size() int64 { return int64(s.size) }
 
-var cacheTotal, cacheHits uint64
+var cacheHits, cacheTotal uint64
+var compBytes, compTotal uint64
 
 func init() {
 	go func() {
 		for range time.NewTicker(time.Second).C {
-			fmt.Println("hits:", cacheHits, "total:", cacheTotal, "perc:", float64(cacheHits)/float64(cacheTotal))
+			hits, total := atomic.LoadUint64(&cacheHits), atomic.LoadUint64(&cacheTotal)
+			cBytes, cTotal := atomic.LoadUint64(&compBytes), atomic.LoadUint64(&compTotal)
+			fmt.Println(
+				"hits:", hits,
+				"total:", total,
+				"perc:", float64(hits)/float64(total),
+				"compressed:", cBytes,
+				"total:", cTotal,
+				"perc:", float64(cBytes)/float64(cTotal),
+			)
 		}
 	}()
 }
@@ -234,13 +245,13 @@ func (s *SeriesSegment) Slice(pos uint32, index uint32, compressed bool) []byte 
 
 	// TODO(jeff): we can do a better job here with the caching
 	s.mu.Lock()
-	cacheTotal++
+	atomic.AddUint64(&cacheTotal, 1)
 	if pos != s.cachedPos || s.udata == nil {
 		s.udata = make([]byte, usize)
 		lz4.UncompressBlock(data[:csize], s.udata)
 		s.cachedPos = pos
 	} else {
-		cacheHits++
+		atomic.AddUint64(&cacheHits, 1)
 	}
 	udata := s.udata
 	s.mu.Unlock()
@@ -276,6 +287,8 @@ func (s *SeriesSegment) lz4Flush() (err error) {
 	// if s.log {
 	// 	fmt.Println(fmt.Sprintf("%p", s.lz4buf), "compressed", size, "into", len(data), "and now at", s.size)
 	// }
+	atomic.AddUint64(&compTotal, uint64(size))
+	atomic.AddUint64(&compBytes, uint64(len(data)))
 
 	return nil
 }
