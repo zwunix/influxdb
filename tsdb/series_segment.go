@@ -9,8 +9,11 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/influxdata/influxdb/pkg/mmap"
 	"github.com/pierrec/lz4"
@@ -43,6 +46,11 @@ type SeriesSegment struct {
 	id   uint16
 	path string
 	lz4  bool // if the segment is lz4 compressed
+	log  bool
+
+	mu        sync.Mutex
+	udata     []byte
+	cachedPos uint32
 
 	data   []byte               // mmap file
 	file   *os.File             // write file handle
@@ -52,16 +60,17 @@ type SeriesSegment struct {
 }
 
 // NewSeriesSegment returns a new instance of SeriesSegment.
-func NewSeriesSegment(id uint16, path string) *SeriesSegment {
+func NewSeriesSegment(id uint16, path string, log bool) *SeriesSegment {
 	return &SeriesSegment{
 		id:   id,
 		path: path,
 		lz4:  strings.HasSuffix(path, ".lz4"),
+		log:  log,
 	}
 }
 
 // CreateSeriesSegment generates an empty segment at path.
-func CreateSeriesSegment(id uint16, path string) (*SeriesSegment, error) {
+func CreateSeriesSegment(id uint16, path string, log bool) (*SeriesSegment, error) {
 	// Generate segment in temp location.
 	f, err := os.Create(path + ".initializing")
 	if err != nil {
@@ -85,7 +94,7 @@ func CreateSeriesSegment(id uint16, path string) (*SeriesSegment, error) {
 	}
 
 	// Open segment at new location.
-	segment := NewSeriesSegment(id, path)
+	segment := NewSeriesSegment(id, path, log)
 	if err := segment.Open(); err != nil {
 		return nil, err
 	}
@@ -138,6 +147,7 @@ func (s *SeriesSegment) InitForWrite() (err error) {
 
 	if s.lz4 {
 		s.lz4buf = new(SeriesSegmentBuffer)
+		// s.lz4buf.log = s.log
 	}
 
 	return nil
@@ -160,13 +170,10 @@ func (s *SeriesSegment) Close() (err error) {
 }
 
 func (s *SeriesSegment) CloseForWrite() (err error) {
-	if s.lz4 {
+	if s.w != nil {
 		if e := s.lz4Flush(); e != nil && err == nil {
 			err = e
 		}
-	}
-
-	if s.w != nil {
 		if e := s.w.Flush(); e != nil && err == nil {
 			err = e
 		}
@@ -192,6 +199,16 @@ func (s *SeriesSegment) ID() uint16 { return s.id }
 // This is only populated once InitForWrite() is called.
 func (s *SeriesSegment) Size() int64 { return int64(s.size) }
 
+var cacheTotal, cacheHits uint64
+
+func init() {
+	go func() {
+		for range time.NewTicker(time.Second).C {
+			fmt.Println("hits:", cacheHits, "total:", cacheTotal, "perc:", float64(cacheHits)/float64(cacheTotal))
+		}
+	}()
+}
+
 // Slice returns a byte slice starting at pos.
 func (s *SeriesSegment) Slice(pos uint32, index uint32, compressed bool) []byte {
 	data := s.data[pos:]
@@ -199,14 +216,41 @@ func (s *SeriesSegment) Slice(pos uint32, index uint32, compressed bool) []byte 
 		return data
 	}
 
+	// if s.log {
+	// 	fmt.Println("<=", s.id, pos, index)
+	// }
+
 	usize := binary.BigEndian.Uint32(data[0:4])
 	csize := binary.BigEndian.Uint32(data[4:8])
+	data = data[8:]
 
-	// TODO(jeff): keep track of these allocations and reuse them
-	udata := make([]byte, usize)
-	lz4.UncompressBlock(data[8:8+csize], udata)
+	if usize == csize { // it didn't compress
+		return data[index:]
+	}
+
+	// if s.log && index > usize {
+	// 	panic("index > usize")
+	// }
+
+	// TODO(jeff): we can do a better job here with the caching
+	s.mu.Lock()
+	cacheTotal++
+	if pos != s.cachedPos || s.udata == nil {
+		s.udata = make([]byte, usize)
+		lz4.UncompressBlock(data[:csize], s.udata)
+		s.cachedPos = pos
+	} else {
+		cacheHits++
+	}
+	udata := s.udata
+	s.mu.Unlock()
 
 	return udata[index:]
+}
+
+func logStack() {
+	var buf [4096]byte
+	fmt.Println(string(buf[:runtime.Stack(buf[:], false)]))
 }
 
 func (s *SeriesSegment) lz4Flush() (err error) {
@@ -227,7 +271,11 @@ func (s *SeriesSegment) lz4Flush() (err error) {
 		return err
 	}
 
-	s.size += uint32(8 + len(data))
+	s.size += 8 + uint32(len(data))
+
+	// if s.log {
+	// 	fmt.Println(fmt.Sprintf("%p", s.lz4buf), "compressed", size, "into", len(data), "and now at", s.size)
+	// }
 
 	return nil
 }
@@ -243,6 +291,9 @@ func (s *SeriesSegment) WriteLogEntry(data []byte) (offset int64, err error) {
 
 			index, ok := s.lz4buf.Append(data)
 			if ok {
+				// if s.log {
+				// 	fmt.Println("=>", s.id, s.size, index)
+				// }
 				return JoinSeriesOffset(s.id, s.size, index, true), nil
 			} else if !first {
 				return 0, ErrSeriesSegmentNotWritable
@@ -250,6 +301,9 @@ func (s *SeriesSegment) WriteLogEntry(data []byte) (offset int64, err error) {
 				return 0, err
 			}
 
+			// if s.log {
+			// 	fmt.Println("performed flush")
+			// }
 			first = false
 		}
 	}
@@ -269,13 +323,23 @@ func (s *SeriesSegment) WriteLogEntry(data []byte) (offset int64, err error) {
 
 // CanWrite returns true if segment has space to write entry data.
 func (s *SeriesSegment) CanWrite(data []byte) bool {
-	return s.w != nil && s.size+uint32(len(data)) <= SeriesSegmentSize(s.id)
+	if s.w == nil {
+		return false
+	}
+	worst := s.size + uint32(len(data))
+	if s.lz4 {
+		worst += 8 + s.lz4buf.Buffered()
+	}
+	return worst <= SeriesSegmentSize(s.id)
 }
 
 // Flush flushes the buffer to disk.
 func (s *SeriesSegment) Flush() error {
 	if s.w == nil {
 		return nil
+	}
+	if err := s.lz4Flush(); err != nil {
+		return err
 	}
 	return s.w.Flush()
 }
@@ -399,7 +463,7 @@ func ReadSeriesKeyFromSegments(a []*SeriesSegment, offset int64) []byte {
 func JoinSeriesOffset(segmentID uint16, pos uint32, index uint32, compressed bool) int64 {
 	out := (int64(segmentID) << 32) | int64(pos)
 	if compressed {
-		out |= int64(index<<40) | 1<<62
+		out |= int64(index&0x3FFFFFF)<<40 | 1<<62
 	}
 	return out
 }
@@ -409,14 +473,23 @@ func SplitSeriesOffset(offset int64) (segmentID uint16, pos uint32, index uint32
 	segmentID = uint16((offset >> 32) & 0xFFFF)
 	pos = uint32(offset & 0xFFFFFFFF)
 
-	if offset&1<<62 > 0 {
-		offset &^= 1 << 62 // clear the compressed bit
+	if offset&(1<<62) != 0 {
 		compressed = true
 		index = uint32((offset >> 40) & 0x3FFFFF)
+		segmentID &= 0xFF
 	}
 
 	return segmentID, pos, index, compressed
 }
+
+// func init() {
+// 	offset := JoinSeriesOffset(1, 2, 3, true)
+// 	fmt.Printf("%064b\n", 1<<62)
+// 	seg, pos, index, comp := SplitSeriesOffset(offset)
+// 	fmt.Println(fmt.Sprintf("%064b", offset), offset)
+// 	fmt.Println(seg, pos, index, comp)
+// 	os.Exit(0)
+// }
 
 // IsValidSeriesSegmentFilename returns true if filename is a 4-character lowercase hexidecimal number.
 func IsValidSeriesSegmentFilename(filename string) bool {
