@@ -10,8 +10,10 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/influxdata/influxdb/pkg/mmap"
+	"github.com/pierrec/lz4"
 )
 
 const (
@@ -40,11 +42,13 @@ var (
 type SeriesSegment struct {
 	id   uint16
 	path string
+	lz4  bool // if the segment is lz4 compressed
 
-	data []byte        // mmap file
-	file *os.File      // write file handle
-	w    *bufio.Writer // bufferred file handle
-	size uint32        // current file size
+	data   []byte               // mmap file
+	file   *os.File             // write file handle
+	w      *bufio.Writer        // bufferred file handle
+	lz4buf *SeriesSegmentBuffer // buffered compressable data
+	size   uint32               // current file size
 }
 
 // NewSeriesSegment returns a new instance of SeriesSegment.
@@ -52,6 +56,7 @@ func NewSeriesSegment(id uint16, path string) *SeriesSegment {
 	return &SeriesSegment{
 		id:   id,
 		path: path,
+		lz4:  strings.HasSuffix(path, ".lz4"),
 	}
 }
 
@@ -116,12 +121,11 @@ func (s *SeriesSegment) Open() error {
 // This is only used for the last segment in the series file.
 func (s *SeriesSegment) InitForWrite() (err error) {
 	// Only calculcate segment data size if writing.
-	for s.size = uint32(SeriesSegmentHeaderSize); s.size < uint32(len(s.data)); {
-		flag, _, _, sz := ReadSeriesEntry(s.data[s.size:])
-		if !IsValidSeriesEntryFlag(flag) {
-			break
-		}
-		s.size += uint32(sz)
+	s.size, err = s.ForEachEntry(func(_ uint8, _ uint64, _ int64, _ []byte) error {
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	// Open file handler for writing & seek to end of data.
@@ -131,6 +135,10 @@ func (s *SeriesSegment) InitForWrite() (err error) {
 		return err
 	}
 	s.w = bufio.NewWriterSize(s.file, 32*1024)
+
+	if s.lz4 {
+		s.lz4buf = new(SeriesSegmentBuffer)
+	}
 
 	return nil
 }
@@ -152,6 +160,12 @@ func (s *SeriesSegment) Close() (err error) {
 }
 
 func (s *SeriesSegment) CloseForWrite() (err error) {
+	if s.lz4 {
+		if e := s.lz4Flush(); e != nil && err == nil {
+			err = e
+		}
+	}
+
 	if s.w != nil {
 		if e := s.w.Flush(); e != nil && err == nil {
 			err = e
@@ -179,16 +193,72 @@ func (s *SeriesSegment) ID() uint16 { return s.id }
 func (s *SeriesSegment) Size() int64 { return int64(s.size) }
 
 // Slice returns a byte slice starting at pos.
-func (s *SeriesSegment) Slice(pos uint32) []byte { return s.data[pos:] }
+func (s *SeriesSegment) Slice(pos uint32, index uint32, compressed bool) []byte {
+	data := s.data[pos:]
+	if !compressed {
+		return data
+	}
+
+	usize := binary.BigEndian.Uint32(data[0:4])
+	csize := binary.BigEndian.Uint32(data[4:8])
+
+	// TODO(jeff): keep track of these allocations and reuse them
+	udata := make([]byte, usize)
+	lz4.UncompressBlock(data[8:8+csize], udata)
+
+	return udata[index:]
+}
+
+func (s *SeriesSegment) lz4Flush() (err error) {
+	if !s.lz4 {
+		return nil
+	}
+
+	size, data := s.lz4buf.Compress()
+
+	var buf [8]byte
+	binary.BigEndian.PutUint32(buf[0:4], uint32(size))
+	binary.BigEndian.PutUint32(buf[4:8], uint32(len(data)))
+
+	if _, err := s.w.Write(buf[:]); err != nil {
+		return err
+	}
+	if _, err := s.w.Write(data); err != nil {
+		return err
+	}
+
+	s.size += uint32(8 + len(data))
+
+	return nil
+}
 
 // WriteLogEntry writes entry data into the segment.
 // Returns the offset of the beginning of the entry.
 func (s *SeriesSegment) WriteLogEntry(data []byte) (offset int64, err error) {
+	if s.lz4 {
+		for first := true; ; first = false {
+			if !s.CanWrite(data) {
+				return 0, ErrSeriesSegmentNotWritable
+			}
+
+			index, ok := s.lz4buf.Append(data)
+			if ok {
+				return JoinSeriesOffset(s.id, s.size, index, true), nil
+			} else if !first {
+				return 0, ErrSeriesSegmentNotWritable
+			} else if err := s.lz4Flush(); err != nil {
+				return 0, err
+			}
+
+			first = false
+		}
+	}
+
 	if !s.CanWrite(data) {
 		return 0, ErrSeriesSegmentNotWritable
 	}
 
-	offset = JoinSeriesOffset(s.id, s.size)
+	offset = JoinSeriesOffset(s.id, s.size, 0, false)
 	if _, err := s.w.Write(data); err != nil {
 		return 0, err
 	}
@@ -234,20 +304,54 @@ func (s *SeriesSegment) MaxSeriesID() uint64 {
 }
 
 // ForEachEntry executes fn for every entry in the segment.
-func (s *SeriesSegment) ForEachEntry(fn func(flag uint8, id uint64, offset int64, key []byte) error) error {
-	for pos := uint32(SeriesSegmentHeaderSize); pos < uint32(len(s.data)); {
+func (s *SeriesSegment) ForEachEntry(fn func(flag uint8, id uint64, offset int64, key []byte) error) (pos uint32, err error) {
+	if s.lz4 {
+		var udata []byte
+	blocks:
+		for pos = uint32(SeriesSegmentHeaderSize); pos < uint32(len(s.data)); {
+			usize := binary.BigEndian.Uint32(s.data[pos+0 : pos+4])
+			csize := binary.BigEndian.Uint32(s.data[pos+4 : pos+8])
+			if usize == 0 || csize == 0 {
+				break
+			}
+
+			if uint32(len(udata)) < usize {
+				udata = make([]byte, usize)
+			}
+			lz4.UncompressBlock(s.data[pos:pos+csize], udata)
+
+			for index := uint32(0); index < uint32(len(udata)); {
+				flag, id, key, sz := ReadSeriesEntry(udata[index:])
+				if !IsValidSeriesEntryFlag(flag) {
+					break blocks
+				}
+
+				offset := JoinSeriesOffset(s.id, pos, index, true)
+				if err := fn(flag, id, offset, key); err != nil {
+					return 0, err
+				}
+
+				index += uint32(sz)
+			}
+
+			pos += csize
+		}
+		return pos, nil
+	}
+
+	for pos = uint32(SeriesSegmentHeaderSize); pos < uint32(len(s.data)); {
 		flag, id, key, sz := ReadSeriesEntry(s.data[pos:])
 		if !IsValidSeriesEntryFlag(flag) {
 			break
 		}
 
-		offset := JoinSeriesOffset(s.id, pos)
+		offset := JoinSeriesOffset(s.id, pos, 0, false)
 		if err := fn(flag, id, offset, key); err != nil {
-			return err
+			return 0, err
 		}
 		pos += uint32(sz)
 	}
-	return nil
+	return pos, nil
 }
 
 // Clone returns a copy of the segment. Excludes the write handler, if set.
@@ -281,24 +385,37 @@ func FindSegment(a []*SeriesSegment, id uint16) *SeriesSegment {
 
 // ReadSeriesKeyFromSegments returns a series key from an offset within a set of segments.
 func ReadSeriesKeyFromSegments(a []*SeriesSegment, offset int64) []byte {
-	segmentID, pos := SplitSeriesOffset(offset)
+	segmentID, pos, index, compressed := SplitSeriesOffset(offset)
 	segment := FindSegment(a, segmentID)
 	if segment == nil {
 		return nil
 	}
-	buf := segment.Slice(pos)
+	buf := segment.Slice(pos, index, compressed)
 	key, _ := ReadSeriesKey(buf)
 	return key
 }
 
 // JoinSeriesOffset returns an offset that combines the 2-byte segmentID and 4-byte pos.
-func JoinSeriesOffset(segmentID uint16, pos uint32) int64 {
-	return (int64(segmentID) << 32) | int64(pos)
+func JoinSeriesOffset(segmentID uint16, pos uint32, index uint32, compressed bool) int64 {
+	out := (int64(segmentID) << 32) | int64(pos)
+	if compressed {
+		out |= int64(index<<40) | 1<<62
+	}
+	return out
 }
 
 // SplitSeriesOffset splits a offset into its 2-byte segmentID and 4-byte pos parts.
-func SplitSeriesOffset(offset int64) (segmentID uint16, pos uint32) {
-	return uint16((offset >> 32) & 0xFFFF), uint32(offset & 0xFFFFFFFF)
+func SplitSeriesOffset(offset int64) (segmentID uint16, pos uint32, index uint32, compressed bool) {
+	segmentID = uint16((offset >> 32) & 0xFFFF)
+	pos = uint32(offset & 0xFFFFFFFF)
+
+	if offset&1<<62 > 0 {
+		offset &^= 1 << 62 // clear the compressed bit
+		compressed = true
+		index = uint32((offset >> 40) & 0x3FFFFF)
+	}
+
+	return segmentID, pos, index, compressed
 }
 
 // IsValidSeriesSegmentFilename returns true if filename is a 4-character lowercase hexidecimal number.

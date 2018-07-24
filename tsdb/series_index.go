@@ -114,13 +114,13 @@ func (idx *SeriesIndex) Recover(segments []*SeriesSegment) error {
 	idx.tombstones = make(map[uint64]struct{})
 
 	// Process all entries since the maximum offset in the on-disk index.
-	minSegmentID, _ := SplitSeriesOffset(idx.maxOffset)
+	minSegmentID, _, _, _ := SplitSeriesOffset(idx.maxOffset)
 	for _, segment := range segments {
 		if segment.ID() < minSegmentID {
 			continue
 		}
 
-		if err := segment.ForEachEntry(func(flag uint8, id uint64, offset int64, key []byte) error {
+		if _, err := segment.ForEachEntry(func(flag uint8, id uint64, offset int64, key []byte) error {
 			if offset <= idx.maxOffset {
 				return nil
 			}

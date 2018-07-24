@@ -127,7 +127,7 @@ func (p *SeriesPartition) openSegments() error {
 
 	// Create initial segment if none exist.
 	if len(p.segments) == 0 {
-		segment, err := CreateSeriesSegment(0, filepath.Join(p.path, "0000"))
+		segment, err := CreateSeriesSegment(0, filepath.Join(p.path, "0000.lz4"))
 		if err != nil {
 			return err
 		}
@@ -449,7 +449,7 @@ func (p *SeriesPartition) createSegment() (*SeriesSegment, error) {
 	if len(p.segments) > 0 {
 		id = p.segments[len(p.segments)-1].ID() + 1
 	}
-	filename := fmt.Sprintf("%04x", id)
+	filename := fmt.Sprintf("%04x.lz4", id)
 
 	// Generate new empty segment.
 	segment, err := CreateSeriesSegment(id, filepath.Join(p.path, filename))
@@ -471,13 +471,13 @@ func (p *SeriesPartition) seriesKeyByOffset(offset int64) []byte {
 		return nil
 	}
 
-	segmentID, pos := SplitSeriesOffset(offset)
+	segmentID, pos, index, compressed := SplitSeriesOffset(offset)
 	for _, segment := range p.segments {
 		if segment.ID() != segmentID {
 			continue
 		}
 
-		key, _ := ReadSeriesKey(segment.Slice(pos + SeriesEntryHeaderSize))
+		key, _ := ReadSeriesKey(segment.Slice(pos+SeriesEntryHeaderSize, index, compressed))
 		return key
 	}
 
@@ -549,7 +549,7 @@ func (c *SeriesPartitionCompactor) compactIndexTo(index *SeriesIndex, seriesN ui
 	for _, segment := range segments {
 		errDone := errors.New("done")
 
-		if err := segment.ForEachEntry(func(flag uint8, id uint64, offset int64, key []byte) error {
+		if _, err := segment.ForEachEntry(func(flag uint8, id uint64, offset int64, key []byte) error {
 			// Make sure we don't go past the offset where the compaction began.
 			if offset >= index.maxOffset {
 				return errDone
