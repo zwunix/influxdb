@@ -1,17 +1,20 @@
 package tsdb
 
 import (
-	"github.com/pierrec/lz4"
+	"github.com/bkaradzic/go-lz4"
+)
+
+const (
+	uncompressedSize = 1 << 19 // 512KB uncompressed
+	compressedSize   = uncompressedSize + (uncompressedSize / 255) + 16 + 4
 )
 
 // SeriesSegmentBuffer buffers writes to be compressed and returns values that help writing the
 // data out.
 type SeriesSegmentBuffer struct {
-	hashTbl [1 << 16]int  // hash table for compression
-	buf     [1 << 24]byte // 4MB uncompressed
-	comp    [1 << 24]byte // 4MB compressed
-	idx     uint32        // into buf
-	// log     bool
+	buf  [uncompressedSize]byte
+	comp [compressedSize]byte
+	idx  uint32 // into buf
 }
 
 // Append copies the byte slice into the uncompressed buffer. If it won't fit, it returns false and
@@ -19,9 +22,6 @@ type SeriesSegmentBuffer struct {
 func (s *SeriesSegmentBuffer) Append(b []byte) (idx uint32, ok bool) {
 	// most of the time the copy will proceed, so just try that first
 	idx, n := s.idx, copy(s.buf[s.idx:], b)
-	// if s.log {
-	// 	fmt.Println(fmt.Sprintf("%p", s), "copied", n, "bytes starting at", s.idx)
-	// }
 	if n == len(b) {
 		s.idx += uint32(n)
 	}
@@ -42,11 +42,11 @@ func (s *SeriesSegmentBuffer) Reset() { s.idx = 0 }
 func (s *SeriesSegmentBuffer) Compress() (size uint32, data []byte) {
 	size = s.idx
 
-	di, err := lz4.CompressBlock(s.buf[:s.idx], s.comp[:], s.hashTbl[:])
+	data, err := lz4.Encode(s.comp[:], s.buf[:s.idx])
 	s.Reset()
 
-	if err != nil || di == 0 {
-		return size, s.buf[:s.idx:s.idx]
+	if err != nil || data == nil || uint32(len(data)) >= size {
+		return size, s.buf[:size:size]
 	}
-	return size, s.comp[:di:di]
+	return size, data
 }

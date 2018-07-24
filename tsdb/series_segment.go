@@ -9,15 +9,12 @@ import (
 	"io"
 	"os"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"time"
 
+	"github.com/bkaradzic/go-lz4"
 	"github.com/influxdata/influxdb/pkg/mmap"
-	"github.com/pierrec/lz4"
 )
 
 const (
@@ -47,7 +44,6 @@ type SeriesSegment struct {
 	id   uint16
 	path string
 	lz4  bool // if the segment is lz4 compressed
-	log  bool
 
 	mu        sync.Mutex
 	udata     []byte
@@ -61,17 +57,16 @@ type SeriesSegment struct {
 }
 
 // NewSeriesSegment returns a new instance of SeriesSegment.
-func NewSeriesSegment(id uint16, path string, log bool) *SeriesSegment {
+func NewSeriesSegment(id uint16, path string) *SeriesSegment {
 	return &SeriesSegment{
 		id:   id,
 		path: path,
 		lz4:  strings.HasSuffix(path, ".lz4"),
-		log:  log,
 	}
 }
 
 // CreateSeriesSegment generates an empty segment at path.
-func CreateSeriesSegment(id uint16, path string, log bool) (*SeriesSegment, error) {
+func CreateSeriesSegment(id uint16, path string) (*SeriesSegment, error) {
 	// Generate segment in temp location.
 	f, err := os.Create(path + ".initializing")
 	if err != nil {
@@ -95,7 +90,7 @@ func CreateSeriesSegment(id uint16, path string, log bool) (*SeriesSegment, erro
 	}
 
 	// Open segment at new location.
-	segment := NewSeriesSegment(id, path, log)
+	segment := NewSeriesSegment(id, path)
 	if err := segment.Open(); err != nil {
 		return nil, err
 	}
@@ -148,7 +143,6 @@ func (s *SeriesSegment) InitForWrite() (err error) {
 
 	if s.lz4 {
 		s.lz4buf = new(SeriesSegmentBuffer)
-		// s.lz4buf.log = s.log
 	}
 
 	return nil
@@ -175,6 +169,7 @@ func (s *SeriesSegment) CloseForWrite() (err error) {
 		if e := s.lz4Flush(); e != nil && err == nil {
 			err = e
 		}
+		s.lz4buf = nil
 		if e := s.w.Flush(); e != nil && err == nil {
 			err = e
 		}
@@ -200,36 +195,12 @@ func (s *SeriesSegment) ID() uint16 { return s.id }
 // This is only populated once InitForWrite() is called.
 func (s *SeriesSegment) Size() int64 { return int64(s.size) }
 
-var cacheHits, cacheTotal uint64
-var compBytes, compTotal uint64
-
-func init() {
-	go func() {
-		for range time.NewTicker(time.Second).C {
-			hits, total := atomic.LoadUint64(&cacheHits), atomic.LoadUint64(&cacheTotal)
-			cBytes, cTotal := atomic.LoadUint64(&compBytes), atomic.LoadUint64(&compTotal)
-			fmt.Println(
-				"hits:", hits,
-				"total:", total,
-				"perc:", float64(hits)/float64(total),
-				"compressed:", cBytes,
-				"total:", cTotal,
-				"perc:", float64(cBytes)/float64(cTotal),
-			)
-		}
-	}()
-}
-
 // Slice returns a byte slice starting at pos.
 func (s *SeriesSegment) Slice(pos uint32, index uint32, compressed bool) []byte {
 	data := s.data[pos:]
 	if !compressed {
 		return data
 	}
-
-	// if s.log {
-	// 	fmt.Println("<=", s.id, pos, index)
-	// }
 
 	usize := binary.BigEndian.Uint32(data[0:4])
 	csize := binary.BigEndian.Uint32(data[4:8])
@@ -239,29 +210,17 @@ func (s *SeriesSegment) Slice(pos uint32, index uint32, compressed bool) []byte 
 		return data[index:]
 	}
 
-	// if s.log && index > usize {
-	// 	panic("index > usize")
-	// }
-
 	// TODO(jeff): we can do a better job here with the caching
+
 	s.mu.Lock()
-	atomic.AddUint64(&cacheTotal, 1)
 	if pos != s.cachedPos || s.udata == nil {
-		s.udata = make([]byte, usize)
-		lz4.UncompressBlock(data[:csize], s.udata)
+		s.udata, _ = lz4.Decode(make([]byte, usize), data[:csize])
 		s.cachedPos = pos
-	} else {
-		atomic.AddUint64(&cacheHits, 1)
 	}
 	udata := s.udata
 	s.mu.Unlock()
 
 	return udata[index:]
-}
-
-func logStack() {
-	var buf [4096]byte
-	fmt.Println(string(buf[:runtime.Stack(buf[:], false)]))
 }
 
 func (s *SeriesSegment) lz4Flush() (err error) {
@@ -284,12 +243,6 @@ func (s *SeriesSegment) lz4Flush() (err error) {
 
 	s.size += 8 + uint32(len(data))
 
-	// if s.log {
-	// 	fmt.Println(fmt.Sprintf("%p", s.lz4buf), "compressed", size, "into", len(data), "and now at", s.size)
-	// }
-	atomic.AddUint64(&compTotal, uint64(size))
-	atomic.AddUint64(&compBytes, uint64(len(data)))
-
 	return nil
 }
 
@@ -304,9 +257,6 @@ func (s *SeriesSegment) WriteLogEntry(data []byte) (offset int64, err error) {
 
 			index, ok := s.lz4buf.Append(data)
 			if ok {
-				// if s.log {
-				// 	fmt.Println("=>", s.id, s.size, index)
-				// }
 				return JoinSeriesOffset(s.id, s.size, index, true), nil
 			} else if !first {
 				return 0, ErrSeriesSegmentNotWritable
@@ -314,9 +264,6 @@ func (s *SeriesSegment) WriteLogEntry(data []byte) (offset int64, err error) {
 				return 0, err
 			}
 
-			// if s.log {
-			// 	fmt.Println("performed flush")
-			// }
 			first = false
 		}
 	}
@@ -391,11 +338,15 @@ func (s *SeriesSegment) ForEachEntry(fn func(flag uint8, id uint64, offset int64
 			if usize == 0 || csize == 0 {
 				break
 			}
-
-			if uint32(len(udata)) < usize {
+			if uint32(cap(udata)) < usize {
 				udata = make([]byte, usize)
+			} else {
+				udata = udata[:usize]
 			}
-			lz4.UncompressBlock(s.data[pos:pos+csize], udata)
+			udata, err = lz4.Decode(udata, s.data[pos+8:pos+8+csize])
+			if err != nil {
+				return 0, err
+			}
 
 			for index := uint32(0); index < uint32(len(udata)); {
 				flag, id, key, sz := ReadSeriesEntry(udata[index:])
@@ -411,7 +362,7 @@ func (s *SeriesSegment) ForEachEntry(fn func(flag uint8, id uint64, offset int64
 				index += uint32(sz)
 			}
 
-			pos += csize
+			pos += 8 + csize
 		}
 		return pos, nil
 	}
@@ -494,15 +445,6 @@ func SplitSeriesOffset(offset int64) (segmentID uint16, pos uint32, index uint32
 
 	return segmentID, pos, index, compressed
 }
-
-// func init() {
-// 	offset := JoinSeriesOffset(1, 2, 3, true)
-// 	fmt.Printf("%064b\n", 1<<62)
-// 	seg, pos, index, comp := SplitSeriesOffset(offset)
-// 	fmt.Println(fmt.Sprintf("%064b", offset), offset)
-// 	fmt.Println(seg, pos, index, comp)
-// 	os.Exit(0)
-// }
 
 // IsValidSeriesSegmentFilename returns true if filename is a 4-character lowercase hexidecimal number.
 func IsValidSeriesSegmentFilename(filename string) bool {

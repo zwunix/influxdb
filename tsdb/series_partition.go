@@ -109,7 +109,7 @@ func (p *SeriesPartition) openSegments() error {
 			continue
 		}
 
-		segment := NewSeriesSegment(segmentID, filepath.Join(p.path, fi.Name()), p.id == 0)
+		segment := NewSeriesSegment(segmentID, filepath.Join(p.path, fi.Name()))
 		if err := segment.Open(); err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ func (p *SeriesPartition) openSegments() error {
 
 	// Create initial segment if none exist.
 	if len(p.segments) == 0 {
-		segment, err := CreateSeriesSegment(0, filepath.Join(p.path, "0000.lz4"), p.id == 0)
+		segment, err := CreateSeriesSegment(0, filepath.Join(p.path, "0000.lz4"))
 		if err != nil {
 			return err
 		}
@@ -452,7 +452,7 @@ func (p *SeriesPartition) createSegment() (*SeriesSegment, error) {
 	filename := fmt.Sprintf("%04x.lz4", id)
 
 	// Generate new empty segment.
-	segment, err := CreateSeriesSegment(id, filepath.Join(p.path, filename), p.id == 0)
+	segment, err := CreateSeriesSegment(id, filepath.Join(p.path, filename))
 	if err != nil {
 		return nil, err
 	}
