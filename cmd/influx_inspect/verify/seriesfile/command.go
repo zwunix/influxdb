@@ -46,7 +46,7 @@ func (cmd *Command) Run(args ...string) error {
 	fs.BoolVar(&cmd.verbose, "v", false,
 		"Verbose output.")
 	fs.IntVar(&cmd.concurrent, "c", runtime.GOMAXPROCS(0),
-		"How many concurrent workers to run.")
+		"Number of concurrent workers.")
 
 	fs.SetOutput(cmd.Stdout)
 	fs.Usage = cmd.printUsage
@@ -111,9 +111,9 @@ Usage: influx_inspect verify-seriesfile [flags]
             Path to a series file. This overrides -db and -dir.
     -v
             Enable verbose logging.
-    -c
-            How many concurrent workers to run.
-            Defaults to "%[2]d" on this machine.
+    -c <integer>
+			Number of concurrent workers. Default is equal to the
+			value for GOMAXPROCS, currently "%[2]d" on this machine.
 `
 
 	fmt.Printf(usage, os.Getenv("HOME"), runtime.GOMAXPROCS(0))
