@@ -49,7 +49,6 @@ type Index struct {
 
 	database string
 	sfile    *tsdb.SeriesFile
-	fieldset *tsdb.MeasurementFieldSet
 
 	// In-memory metadata index, built on load and updated when new series come in
 	measurements map[string]*measurement // measurement name to object and index
@@ -90,10 +89,6 @@ func (i *Index) Bytes() int {
 	b += 24 // mu RWMutex is 24 bytes
 	b += int(unsafe.Sizeof(i.database)) + len(i.database)
 	// Do not count SeriesFile because it belongs to the code that constructed this Index.
-	if i.fieldset != nil {
-		b += int(unsafe.Sizeof(i.fieldset)) + i.fieldset.Bytes()
-	}
-	b += int(unsafe.Sizeof(i.fieldset))
 	for k, v := range i.measurements {
 		b += int(unsafe.Sizeof(k)) + len(k)
 		b += int(unsafe.Sizeof(v)) + v.bytes()
@@ -842,20 +837,6 @@ func (i *Index) SeriesKeys() []string {
 	i.mu.RUnlock()
 	return s
 
-}
-
-// SetFieldSet sets a shared field set from the engine.
-func (i *Index) SetFieldSet(fieldset *tsdb.MeasurementFieldSet) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	i.fieldset = fieldset
-}
-
-// FieldSet returns the assigned fieldset.
-func (i *Index) FieldSet() *tsdb.MeasurementFieldSet {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-	return i.fieldset
 }
 
 // SetFieldName adds a field name to a measurement.

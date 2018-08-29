@@ -33,18 +33,8 @@ type arrayCursorIterator struct {
 }
 
 func (q *arrayCursorIterator) Next(ctx context.Context, r *tsdb.CursorRequest) (tsdb.Cursor, error) {
-	// Look up fields for measurement.
-	mf := q.e.fieldset.Fields(r.Name)
-	if mf == nil {
-		return nil, nil
-	}
-
-	// Find individual field.
-	f := mf.Field(r.Field)
-	if f == nil {
-		// field doesn't exist for this measurement
-		return nil, nil
-	}
+	// TODO(jeff): use the series file off of the engine to look up the type
+	return nil, nil
 
 	if grp := metrics.GroupFromContext(ctx); grp != nil {
 		grp.GetCounter(numberOfRefCursorsCounter).Add(1)
@@ -56,7 +46,7 @@ func (q *arrayCursorIterator) Next(ctx context.Context, r *tsdb.CursorRequest) (
 	opt.EndTime = r.EndTime
 
 	// Return appropriate cursor based on type.
-	switch f.Type {
+	switch typ := influxql.Float; typ {
 	case influxql.Float:
 		return q.buildFloatArrayCursor(ctx, r.Name, r.Tags, r.Field, opt), nil
 	case influxql.Integer:
@@ -68,7 +58,7 @@ func (q *arrayCursorIterator) Next(ctx context.Context, r *tsdb.CursorRequest) (
 	case influxql.Boolean:
 		return q.buildBooleanArrayCursor(ctx, r.Name, r.Tags, r.Field, opt), nil
 	default:
-		panic(fmt.Sprintf("unreachable: %T", f.Type))
+		panic(fmt.Sprintf("unreachable: %T", typ))
 	}
 }
 

@@ -65,8 +65,6 @@ type Engine interface {
 	MeasurementExists(name []byte) (bool, error)
 
 	MeasurementNamesByRegex(re *regexp.Regexp) ([][]byte, error)
-	MeasurementFieldSet() *MeasurementFieldSet
-	MeasurementFields(measurement []byte) *MeasurementFields
 	ForEachMeasurementName(fn func(name []byte) error) error
 	DeleteMeasurement(name []byte) error
 
@@ -187,9 +185,8 @@ type EngineOptions struct {
 	// nil will allow all combinations to pass.
 	ShardFilter func(database, rp string, id uint64) bool
 
-	Config         Config
-	SeriesIDSets   SeriesIDSets
-	FieldValidator FieldValidator
+	Config       Config
+	SeriesIDSets SeriesIDSets
 
 	OnNewEngine func(Engine)
 

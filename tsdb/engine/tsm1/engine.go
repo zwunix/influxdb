@@ -155,8 +155,6 @@ type Engine struct {
 	traceLogger  *zap.Logger // Logger to be used when trace-logging is on.
 	traceLogging bool
 
-	fieldset *tsdb.MeasurementFieldSet
-
 	WAL            *WAL
 	Cache          *Cache
 	Compactor      *Compactor
@@ -571,16 +569,6 @@ func (e *Engine) MeasurementNamesByRegex(re *regexp.Regexp) ([][]byte, error) {
 	return e.index.MeasurementNamesByRegex(re)
 }
 
-// MeasurementFieldSet returns the measurement field set.
-func (e *Engine) MeasurementFieldSet() *tsdb.MeasurementFieldSet {
-	return e.fieldset
-}
-
-// MeasurementFields returns the measurement fields for a measurement.
-func (e *Engine) MeasurementFields(measurement []byte) *tsdb.MeasurementFields {
-	return e.fieldset.CreateFieldsIfNotExists(measurement)
-}
-
 func (e *Engine) HasTagKey(name, key []byte) (bool, error) {
 	return e.index.HasTagKey(name, key)
 }
@@ -720,17 +708,6 @@ func (e *Engine) Open() error {
 		return err
 	}
 
-	fields, err := tsdb.NewMeasurementFieldSet(filepath.Join(e.path, "fields.idx"))
-	if err != nil {
-		e.logger.Warn(fmt.Sprintf("error opening fields.idx: %v.  Rebuilding.", err))
-	}
-
-	e.mu.Lock()
-	e.fieldset = fields
-	e.mu.Unlock()
-
-	e.index.SetFieldSet(fields)
-
 	if e.WALEnabled {
 		if err := e.WAL.Open(); err != nil {
 			return err
@@ -798,9 +775,9 @@ func (e *Engine) LoadMetadataIndex(shardID uint64, index tsdb.Index) error {
 	// Save reference to index for iterator creation.
 	e.index = index
 
-	// If we have the cached fields index on disk and we're using TSI, we
-	// can skip scanning all the TSM files.
-	if e.index.Type() != inmem.IndexName && !e.fieldset.IsEmpty() {
+	// TODO(jeff): VALIDATE THIS
+	// If we're using TSI, we can skip scanning all the TSM files.
+	if e.index.Type() != inmem.IndexName {
 		return nil
 	}
 
@@ -866,11 +843,6 @@ func (e *Engine) LoadMetadataIndex(shardID uint64, index tsdb.Index) error {
 		if err := e.addToIndexFromKey(keys, fieldTypes); err != nil {
 			return err
 		}
-	}
-
-	// Save the field set index so we don't have to rebuild it next time
-	if err := e.fieldset.Save(); err != nil {
-		return err
 	}
 
 	e.traceLogger.Info("Meta data index for shard loaded", zap.Uint64("id", shardID), zap.Duration("duration", time.Since(now)))
@@ -1221,7 +1193,6 @@ func (e *Engine) readFileFromBackup(tr *tar.Reader, shardRelativePath string, as
 // names from composite keys, and add them to the database index and measurement
 // fields.
 func (e *Engine) addToIndexFromKey(keys [][]byte, fieldTypes []influxql.DataType) error {
-	var field []byte
 	collection := &tsdb.SeriesCollection{
 		Keys:  keys,
 		Names: make([][]byte, 0, len(keys)),
@@ -1231,14 +1202,8 @@ func (e *Engine) addToIndexFromKey(keys [][]byte, fieldTypes []influxql.DataType
 
 	for i := 0; i < len(keys); i++ {
 		// Replace tsm key format with index key format.
-		collection.Keys[i], field = SeriesAndFieldFromCompositeKey(collection.Keys[i])
-		name := models.ParseName(collection.Keys[i])
-		mf := e.fieldset.CreateFieldsIfNotExists(name)
-		if err := mf.CreateFieldIfNotExists(field, fieldTypes[i]); err != nil {
-			return err
-		}
-
-		collection.Names = append(collection.Names, name)
+		collection.Keys[i], _ = SeriesAndFieldFromCompositeKey(collection.Keys[i])
+		collection.Names = append(collection.Names, models.ParseName(collection.Keys[i]))
 		collection.Tags = append(collection.Tags, models.ParseTags(keys[i]))
 		collection.Types = append(collection.Types, fieldTypeFromDataType(fieldTypes[i]))
 	}
@@ -1726,48 +1691,6 @@ func (e *Engine) deleteSeriesRange(seriesKeys [][]byte, min, max int64) error {
 
 // DeleteMeasurement deletes a measurement and all related series.
 func (e *Engine) DeleteMeasurement(name []byte) error {
-	// Delete the bulk of data outside of the fields lock.
-	if err := e.deleteMeasurement(name); err != nil {
-		return err
-	}
-
-	// A sentinel error message to cause DeleteWithLock to not delete the measurement
-	abortErr := fmt.Errorf("measurements still exist")
-
-	// Under write lock, delete the measurement if we no longer have any data stored for
-	// the measurement.  If data exists, we can't delete the field set yet as there
-	// were writes to the measurement while we are deleting it.
-	if err := e.fieldset.DeleteWithLock(string(name), func() error {
-		encodedName := models.EscapeMeasurement(name)
-
-		// First scan the cache to see if any series exists for this measurement.
-		if err := e.Cache.ApplyEntryFn(func(k []byte, _ *entry) error {
-			if bytes.HasPrefix(k, encodedName) {
-				return abortErr
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-
-		// Check the filestore.
-		return e.FileStore.WalkKeys(name, func(k []byte, typ byte) error {
-			if bytes.HasPrefix(k, encodedName) {
-				return abortErr
-			}
-			return nil
-		})
-
-	}); err != nil && err != abortErr {
-		// Something else failed, return it
-		return err
-	}
-
-	return e.fieldset.Save()
-}
-
-// DeleteMeasurement deletes a measurement and all related series.
-func (e *Engine) deleteMeasurement(name []byte) error {
 	// Attempt to find the series keys.
 	indexSet := tsdb.IndexSet{Indexes: []tsdb.Index{e.index}, SeriesFile: e.sfile}
 	itr, err := indexSet.MeasurementSeriesByExprIterator(name, nil)
@@ -2819,29 +2742,15 @@ func (e *Engine) buildCursor(ctx context.Context, measurement, seriesKey string,
 		return &stringSliceCursor{values: []string{seriesKey}}
 	}
 
-	// Look up fields for measurement.
-	mf := e.fieldset.FieldsByString(measurement)
-	if mf == nil {
-		return nil
-	}
-
-	// Check for system field for field keys.
-	if ref.Val == "_fieldKey" {
-		return &stringSliceCursor{values: mf.FieldKeys()}
-	}
-
-	// Find individual field.
-	f := mf.Field(ref.Val)
-	if f == nil {
-		return nil
-	}
+	// TDOO(jeff): use the seriesKey (??) to look up the type in the series file
+	typ := influxql.Float
 
 	// Check if we need to perform a cast. Performing a cast in the
 	// engine (if it is possible) is much more efficient than an automatic cast.
-	if ref.Type != influxql.Unknown && ref.Type != influxql.AnyField && ref.Type != f.Type {
+	if ref.Type != influxql.Unknown && ref.Type != influxql.AnyField && ref.Type != typ {
 		switch ref.Type {
 		case influxql.Float:
-			switch f.Type {
+			switch typ {
 			case influxql.Integer:
 				cur := e.buildIntegerCursor(ctx, measurement, seriesKey, ref.Val, opt)
 				return &floatCastIntegerCursor{cursor: cur}
@@ -2850,7 +2759,7 @@ func (e *Engine) buildCursor(ctx context.Context, measurement, seriesKey string,
 				return &floatCastUnsignedCursor{cursor: cur}
 			}
 		case influxql.Integer:
-			switch f.Type {
+			switch typ {
 			case influxql.Float:
 				cur := e.buildFloatCursor(ctx, measurement, seriesKey, ref.Val, opt)
 				return &integerCastFloatCursor{cursor: cur}
@@ -2859,7 +2768,7 @@ func (e *Engine) buildCursor(ctx context.Context, measurement, seriesKey string,
 				return &integerCastUnsignedCursor{cursor: cur}
 			}
 		case influxql.Unsigned:
-			switch f.Type {
+			switch typ {
 			case influxql.Float:
 				cur := e.buildFloatCursor(ctx, measurement, seriesKey, ref.Val, opt)
 				return &unsignedCastFloatCursor{cursor: cur}
@@ -2872,7 +2781,7 @@ func (e *Engine) buildCursor(ctx context.Context, measurement, seriesKey string,
 	}
 
 	// Return appropriate cursor based on type.
-	switch f.Type {
+	switch typ {
 	case influxql.Float:
 		return e.buildFloatCursor(ctx, measurement, seriesKey, ref.Val, opt)
 	case influxql.Integer:

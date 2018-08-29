@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"errors"
-	"sort"
 
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/query"
@@ -44,8 +43,6 @@ type SeriesRow struct {
 
 type indexSeriesCursor struct {
 	sqry            tsdb.SeriesCursor
-	fields          measurementFields
-	nf              []field
 	field           field
 	err             error
 	tags            models.Tags
@@ -103,54 +100,17 @@ func newIndexSeriesCursor(ctx context.Context, predicate *Predicate, shards []*t
 		}
 	}
 
-	var mitr tsdb.MeasurementIterator
-	name, singleMeasurement := HasSingleMeasurementNoOR(p.measurementCond)
-	if singleMeasurement {
-		mitr = tsdb.NewMeasurementSliceIterator([][]byte{[]byte(name)})
-	}
+	// TODO(jeff): HOLY MOLY! instead we assume _f exists in the tags and use that to figure out
+	// the field name. which means we don't have to query for all the fields for all the
+	// measurements or whatever. IS THIS OK!?
 
 	sg := tsdb.Shards(shards)
-	p.sqry, err = sg.CreateSeriesCursor(ctx, tsdb.SeriesCursorRequest{Measurements: mitr}, opt.Condition)
-	if p.sqry != nil && err == nil {
-		// Optimisation to check if request is only interested in results for a
-		// single measurement. In this case we can efficiently produce all known
-		// field keys from the collection of shards without having to go via
-		// the query engine.
-		if singleMeasurement {
-			fkeys := sg.FieldKeysByMeasurement([]byte(name))
-			if len(fkeys) == 0 {
-				goto CLEANUP
-			}
-
-			fields := make([]field, 0, len(fkeys))
-			for _, key := range fkeys {
-				fields = append(fields, field{n: key, nb: []byte(key)})
-			}
-			p.fields = map[string][]field{name: fields}
-			return p, nil
-		}
-
-		var (
-			itr query.Iterator
-			fi  query.FloatIterator
-		)
-		if itr, err = sg.CreateIterator(ctx, &influxql.Measurement{SystemIterator: "_fieldKeys"}, opt); itr != nil && err == nil {
-			if fi, err = toFloatIterator(itr); err != nil {
-				goto CLEANUP
-			}
-
-			p.fields = extractFields(fi)
-			fi.Close()
-			if len(p.fields) == 0 {
-				goto CLEANUP
-			}
-			return p, nil
-		}
+	p.sqry, err = sg.CreateSeriesCursor(ctx, tsdb.SeriesCursorRequest{}, opt.Condition)
+	if err != nil {
+		p.Close()
+		return nil, err
 	}
-
-CLEANUP:
-	p.Close()
-	return nil, err
+	return p, nil
 }
 
 func (c *indexSeriesCursor) Close() {
@@ -179,35 +139,32 @@ func (c *indexSeriesCursor) Next() *SeriesRow {
 	}
 
 	for {
-		if len(c.nf) == 0 {
-			// next series key
-			sr, err := c.sqry.Next()
-			if err != nil {
-				c.err = err
-				c.Close()
-				return nil
-			} else if sr == nil {
-				c.Close()
-				return nil
-			}
+		if c.measurementCond == nil || evalExprBool(c.measurementCond, c) {
+			break
+		}
 
-			c.row.Name = sr.Name
-			c.row.SeriesTags = sr.Tags
-			c.tags = copyTags(c.tags, sr.Tags)
-			c.tags.Set(measurementKeyBytes, sr.Name)
+		// next series key
+		sr, err := c.sqry.Next()
+		if err != nil {
+			c.err = err
+			c.Close()
+			return nil
+		} else if sr == nil {
+			c.Close()
+			return nil
+		}
 
-			c.nf = c.fields[string(sr.Name)]
-			// c.nf may be nil if there are no fields
-		} else {
-			c.field, c.nf = c.nf[0], c.nf[1:]
-
-			if c.measurementCond == nil || evalExprBool(c.measurementCond, c) {
-				break
-			}
+		c.row.Name = sr.Name
+		c.row.SeriesTags = sr.Tags
+		c.tags = copyTags(c.tags, sr.Tags)
+		c.tags.Set(measurementKeyBytes, sr.Name)
+		nb := c.tags.Get(fieldKeyBytes)
+		c.field = field{
+			nb: nb,
+			n:  string(nb),
 		}
 	}
 
-	c.tags.Set(fieldKeyBytes, c.field.nb)
 	c.row.Field = c.field.n
 
 	if c.cond != nil && c.hasValueExpr {
@@ -283,54 +240,7 @@ func toFloatIterator(iter query.Iterator) (query.FloatIterator, error) {
 	return sitr, nil
 }
 
-type measurementFields map[string][]field
-
 type field struct {
 	n  string
 	nb []byte
-}
-
-func extractFields(itr query.FloatIterator) measurementFields {
-	mf := make(measurementFields)
-
-	for {
-		p, err := itr.Next()
-		if err != nil {
-			return nil
-		} else if p == nil {
-			break
-		}
-
-		// Aux is populated by `fieldKeysIterator#Next`
-		fields := append(mf[p.Name], field{
-			n: p.Aux[0].(string),
-		})
-
-		mf[p.Name] = fields
-	}
-
-	if len(mf) == 0 {
-		return nil
-	}
-
-	for k, fields := range mf {
-		sort.Slice(fields, func(i, j int) bool {
-			return fields[i].n < fields[j].n
-		})
-
-		// deduplicate
-		i := 1
-		fields[0].nb = []byte(fields[0].n)
-		for j := 1; j < len(fields); j++ {
-			if fields[j].n != fields[j-1].n {
-				fields[i] = fields[j]
-				fields[i].nb = []byte(fields[i].n)
-				i++
-			}
-		}
-
-		mf[k] = fields[:i]
-	}
-
-	return mf
 }

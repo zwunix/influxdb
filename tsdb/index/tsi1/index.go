@@ -346,21 +346,6 @@ func (i *Index) availableThreads() int {
 	return n
 }
 
-// SetFieldSet sets a shared field set from the engine.
-func (i *Index) SetFieldSet(fs *tsdb.MeasurementFieldSet) {
-	for _, p := range i.partitions {
-		p.SetFieldSet(fs)
-	}
-}
-
-// FieldSet returns the assigned fieldset.
-func (i *Index) FieldSet() *tsdb.MeasurementFieldSet {
-	if len(i.partitions) == 0 {
-		return nil
-	}
-	return i.partitions[0].FieldSet()
-}
-
 // ForEachMeasurementName iterates over all measurement names in the index,
 // applying fn. It returns the first error encountered, if any.
 //
