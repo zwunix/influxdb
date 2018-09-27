@@ -33,6 +33,7 @@ type Command struct {
 	out             string
 	database        string
 	retentionPolicy string
+	shardID         string
 	startTime       int64
 	endTime         int64
 	compress        bool
@@ -63,6 +64,7 @@ func (cmd *Command) Run(args ...string) error {
 	fs.StringVar(&cmd.out, "out", os.Getenv("HOME")+"/.influxdb/export", "Destination file to export to")
 	fs.StringVar(&cmd.database, "database", "", "Optional: the database to export")
 	fs.StringVar(&cmd.retentionPolicy, "retention", "", "Optional: the retention policy to export (requires -database)")
+	fs.StringVar(&cmd.shardID, "shard", "", "Optional: limit the export to the specific shard id")
 	fs.StringVar(&start, "start", "", "Optional: the start time to export (RFC3339 format)")
 	fs.StringVar(&end, "end", "", "Optional: the end time to export (RFC3339 format)")
 	fs.BoolVar(&cmd.compress, "compress", false, "Compress the output")
@@ -147,9 +149,11 @@ func (cmd *Command) walkTSMFiles() error {
 		}
 		if dirs[0] == cmd.database || cmd.database == "" {
 			if dirs[1] == cmd.retentionPolicy || cmd.retentionPolicy == "" {
-				key := filepath.Join(dirs[0], dirs[1])
-				cmd.manifest[key] = struct{}{}
-				cmd.tsmFiles[key] = append(cmd.tsmFiles[key], path)
+				if dirs[2] == cmd.shardID || cmd.shardID == "" {
+					key := filepath.Join(dirs[0], dirs[1])
+					cmd.manifest[key] = struct{}{}
+					cmd.tsmFiles[key] = append(cmd.tsmFiles[key], path)
+				}
 			}
 		}
 		return nil
