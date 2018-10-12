@@ -163,7 +163,8 @@ func median(a []int) float64 {
 	if l == 0 {
 		return math.NaN()
 	} else if l%2 == 0 {
-		return float64((a[l/2-1] + a[l/2+1])) / 2.0
+		i := l/2 - 1
+		return float64((a[i] + a[i+1])) / 2.0
 	}
 	return float64(a[l/2])
 }
