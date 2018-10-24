@@ -73,3 +73,7 @@
 [[constraint]]
   branch = "master"
   name = "github.com/influxdata/flux"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/dvyukov/go-fuzz"

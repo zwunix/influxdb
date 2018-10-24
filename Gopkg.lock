@@ -197,6 +197,14 @@
   revision = "3522498ce2c8ea06df73e55df58edfbfb33cfdd6"
 
 [[projects]]
+  branch = "master"
+  digest = "1:573eb07184ff0105fa45a2a9357df73a4a88db5c6f71a75c4d106e45353e4f7a"
+  name = "github.com/dvyukov/go-fuzz"
+  packages = ["go-fuzz-dep"]
+  pruneopts = "UT"
+  revision = "4aff8368ef1910b258081d1fea6d73090e2e1968"
+
+[[projects]]
   digest = "1:938a2672d6ebbb7f7bc63eee3e4b9464c16ffcf77ec8913d3edbf32b4e3984dd"
   name = "github.com/fatih/color"
   packages = ["."]
@@ -957,6 +965,7 @@
     "github.com/davecgh/go-spew/spew",
     "github.com/dgrijalva/jwt-go",
     "github.com/dgryski/go-bitstream",
+    "github.com/dvyukov/go-fuzz/go-fuzz-dep",
     "github.com/gogo/protobuf/gogoproto",
     "github.com/gogo/protobuf/proto",
     "github.com/gogo/protobuf/types",
@@ -990,6 +999,7 @@
     "github.com/paulbellamy/ratecounter",
     "github.com/peterh/liner",
     "github.com/pkg/errors",
+    "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promhttp",
     "github.com/retailnext/hllpp",
     "github.com/tinylib/msgp/msgp",
