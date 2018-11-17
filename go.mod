@@ -40,6 +40,7 @@ require (
 	github.com/influxdata/flux v0.7.1-0.20181113013654-f98d31e736ec
 	github.com/influxdata/influxdb v0.0.0-20181017211453-9520b8d95606
 	github.com/influxdata/influxql v0.0.0-20180925231337-1cbfca8e56b6
+	github.com/influxdata/roaring v0.4.12 // indirect
 	github.com/influxdata/usage-client v0.0.0-20160829180054-6d3895376368
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af // indirect
