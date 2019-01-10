@@ -7,6 +7,7 @@ import {ErrorHandling} from 'src/shared/decorators/errors'
 import LineProtocol from 'src/onboarding/components/configureStep/lineProtocol/LineProtocol'
 import PluginConfigSwitcher from 'src/onboarding/components/configureStep/streaming/PluginConfigSwitcher'
 import EmptyDataSourceState from 'src/onboarding/components/configureStep/EmptyDataSourceState'
+import Scraping from 'src/onboarding/components/configureStep/Scraping'
 
 // Actions
 import {
@@ -78,6 +79,8 @@ class ConfigureDataSourceSwitcher extends PureComponent<Props> {
             onClickSkip={onClickSkip}
           />
         )
+      case DataLoaderType.Scraping:
+        return <Scraping />
       case DataLoaderType.CSV:
         return <div>{DataLoaderType.CSV}</div>
       default:

@@ -105,6 +105,23 @@ describe('Onboarding.Components.SelectionStep.SelectDataSourceStep', () => {
     })
   })
 
+  describe('if type is scraping', () => {
+    it('renders back and next buttons with correct text', () => {
+      const wrapper = setup({type: DataLoaderType.Scraping})
+      const onboardingButtons = wrapper.find(OnboardingButtons)
+
+      expect(onboardingButtons.prop('backButtonText')).toBe(
+        'Back to Admin Setup'
+      )
+      expect(onboardingButtons.prop('nextButtonText')).toBe(
+        'Continue to Scraper Configuration'
+      )
+      expect(onboardingButtons.prop('nextButtonStatus')).toBe(
+        ComponentStatus.Default
+      )
+    })
+  })
+
   describe('if type and substep is streaming', () => {
     describe('if there are no plugins selected', () => {
       it('renders streaming selector with buttons', () => {

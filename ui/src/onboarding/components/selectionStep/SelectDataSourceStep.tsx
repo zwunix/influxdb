@@ -131,6 +131,8 @@ export class SelectDataSourceStep extends PureComponent<Props, State> {
         return 'Continue to Streaming Selection'
       case DataLoaderType.LineProtocol:
         return 'Continue to Line Protocol Configuration'
+      case DataLoaderType.Scraping:
+        return 'Continue to Scraper Configuration'
       case DataLoaderType.Empty:
         return 'Continue to Configuration'
     }
