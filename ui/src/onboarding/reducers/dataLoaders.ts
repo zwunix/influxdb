@@ -34,6 +34,7 @@ export const INITIAL_STATE: DataLoadersState = {
   precision: WritePrecision.Ns,
   telegrafConfigID: null,
   pluginBundles: [],
+  scraper: {interval: '', bucket: '', urls: []},
 }
 
 export default (state = INITIAL_STATE, action: Action): DataLoadersState => {
