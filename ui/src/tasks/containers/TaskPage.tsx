@@ -3,11 +3,13 @@ import React, {PureComponent, ChangeEvent} from 'react'
 import {InjectedRouter} from 'react-router'
 import {connect} from 'react-redux'
 
+// components
 import TaskForm from 'src/tasks/components/TaskForm'
 import TaskHeader from 'src/tasks/components/TaskHeader'
+import FluxEditor from 'src/shared/components/FluxEditor'
 import {Page} from 'src/pageLayout'
 
-import {Links} from 'src/types/v2/links'
+// actions
 import {State as TasksState} from 'src/tasks/reducers/v2'
 import {
   setNewScript,
@@ -16,12 +18,17 @@ import {
   setTaskOption,
   clearTask,
 } from 'src/tasks/actions/v2'
+// types
+import {Links} from 'src/types/v2/links'
+import {Organization} from 'src/types/v2'
 import {
   TaskOptions,
   TaskOptionKeys,
   TaskSchedule,
 } from 'src/utils/taskOptionsToFluxScript'
-import {Organization} from 'src/types/v2'
+
+// Styles
+import 'src/tasks/components/TaskForm.scss'
 
 interface PassedInProps {
   router: InjectedRouter
@@ -71,15 +78,24 @@ class TaskPage extends PureComponent<
           onSave={this.handleSave}
         />
         <Page.Contents fullWidth={true} scrollable={false}>
-          <TaskForm
-            orgs={orgs}
-            script={newScript}
-            taskOptions={taskOptions}
-            onChangeInput={this.handleChangeInput}
-            onChangeScheduleType={this.handleChangeScheduleType}
-            onChangeScript={this.handleChangeScript}
-            onChangeTaskOrgID={this.handleChangeTaskOrgID}
-          />
+          <div className="task-form">
+            <TaskForm
+              orgs={orgs}
+              taskOptions={taskOptions}
+              onChangeInput={this.handleChangeInput}
+              onChangeScheduleType={this.handleChangeScheduleType}
+              onChangeTaskOrgID={this.handleChangeTaskOrgID}
+            />
+            <div className="task-form--editor">
+              <FluxEditor
+                script={newScript}
+                onChangeScript={this.handleChangeScript}
+                visibility="visible"
+                status={{text: '', type: ''}}
+                suggestions={[]}
+              />
+            </div>
+          </div>
         </Page.Contents>
       </Page>
     )

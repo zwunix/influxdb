@@ -8,7 +8,7 @@ import {connect} from 'react-redux'
 import TaskForm from 'src/tasks/components/TaskForm'
 import TaskHeader from 'src/tasks/components/TaskHeader'
 import {Page} from 'src/pageLayout'
-import {Task as TaskAPI, User, Organization} from 'src/api'
+import FluxEditor from 'src/shared/components/FluxEditor'
 
 // Actions
 import {
@@ -22,6 +22,7 @@ import {
 } from 'src/tasks/actions/v2'
 
 // Types
+import {Task as TaskAPI, User, Organization} from 'src/api'
 import {Links} from 'src/types/v2/links'
 import {State as TasksState} from 'src/tasks/reducers/v2'
 import {
@@ -92,15 +93,24 @@ class TaskPage extends PureComponent<
           onSave={this.handleSave}
         />
         <Page.Contents fullWidth={true} scrollable={false}>
-          <TaskForm
-            orgs={orgs}
-            script={currentScript}
-            taskOptions={taskOptions}
-            onChangeScript={this.handleChangeScript}
-            onChangeScheduleType={this.handleChangeScheduleType}
-            onChangeInput={this.handleChangeInput}
-            onChangeTaskOrgID={this.handleChangeTaskOrgID}
-          />
+          <div className="task-form">
+            <TaskForm
+              orgs={orgs}
+              taskOptions={taskOptions}
+              onChangeInput={this.handleChangeInput}
+              onChangeScheduleType={this.handleChangeScheduleType}
+              onChangeTaskOrgID={this.handleChangeTaskOrgID}
+            />
+            <div className="task-form--editor">
+              <FluxEditor
+                script={currentScript}
+                onChangeScript={this.handleChangeScript}
+                visibility="visible"
+                status={{text: '', type: ''}}
+                suggestions={[]}
+              />
+            </div>
+          </div>
         </Page.Contents>
       </Page>
     )

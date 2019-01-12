@@ -76,7 +76,9 @@ class SaveAsButton extends PureComponent<Props, State> {
               {saveAsOption === SaveAsOption.Dashboard && (
                 <SaveAsCellForm dismiss={this.handleHideOverlay} />
               )}
-              {saveAsOption === SaveAsOption.Task && <SaveAsTaskForm />}
+              {saveAsOption === SaveAsOption.Task && (
+                <SaveAsTaskForm dismiss={this.handleHideOverlay} />
+              )}
             </OverlayBody>
           </OverlayContainer>
         </OverlayTechnology>
