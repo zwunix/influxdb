@@ -47,6 +47,7 @@
   color: fade-out($g20-white, 0.18);
   white-space: nowrap;
   position: relative;
+  text-align: left;
 
   &.active {
     padding-left: 24px;
