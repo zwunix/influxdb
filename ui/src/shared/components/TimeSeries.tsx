@@ -24,34 +24,29 @@ const executeQueries = (
   variables: {[key: string]: string}
 ): WrappedCancelablePromise<ExecuteFluxQueryResult[]> => {
   let cancel: () => void
-  const cancelToken = new Promise<never>(
-    (_, reject) => (cancel = () => reject(new CancellationError()))
-  )
-  const promise = new Promise<ExecuteFluxQueryResult[]>(
-    async (resolve, reject) => {
-      let pendingQueries = []
-      try {
-        const renderingQueries = queries.map(async ({url, text, type}) => {
-          const renderedQuery = await Promise.race([
-            renderQuery(text, type, variables),
-            cancelToken,
-          ])
-          return executeQuery(url, renderedQuery, type)
-        })
-
-        pendingQueries = await Promise.all(renderingQueries)
-
-        const results = Promise.all(pendingQueries.map(q => q.promise))
-        resolve(await Promise.race([results, cancelToken]))
-      } catch (error) {
-        if (error instanceof CancellationError) {
-          // abort on cancelation
-          pendingQueries.forEach(p => p.cancel())
-        }
-        reject(error)
-      }
+  const cancelToken = new Promise<never>((_, reject) => {
+    cancel = () => {
+      reject(new CancellationError())
     }
-  )
+  })
+  const promise = new Promise<ExecuteFluxQueryResult[]>(async resolve => {
+    let pendingQueries = []
+    const renderingQueries = queries.map(async ({url, text, type}) => {
+      const renderedQuery = await Promise.race([
+        cancelToken,
+        renderQuery(text, type, variables),
+      ])
+      return executeQuery(url, renderedQuery, type)
+    })
+
+    pendingQueries = await Promise.all(renderingQueries)
+
+    cancelToken.catch(() => {
+      pendingQueries.forEach(p => p.cancel())
+    })
+    const results = Promise.all(pendingQueries.map(q => q.promise))
+    resolve(await Promise.race([cancelToken, results]))
+  })
 
   return {promise, cancel}
 }
@@ -159,15 +154,16 @@ class TimeSeries extends Component<Props, State> {
       return
     }
 
-    this.setState({
-      loading: RemoteDataState.Loading,
-      fetchCount: this.state.fetchCount + 1,
-      error: null,
-    })
-
     try {
       const startTime = Date.now()
-      const results = await this.executeCancelableQueries(queries)
+      this.handleCancelQueries()
+      this.setState({
+        loading: RemoteDataState.Loading,
+        fetchCount: this.state.fetchCount + 1,
+        error: null,
+      })
+      this.executingQueries = executeQueries(queries, this.props.variables)
+      const results = await this.executingQueries.promise
       const duration = Date.now() - startTime
       const tables = flatten(results.map(r => parseResponse(r.csv)))
       const files = results.map(r => r.csv)
@@ -195,21 +191,6 @@ class TimeSeries extends Component<Props, State> {
       this.executingQueries.cancel()
       this.setState(defaultState())
     }
-  }
-
-  private executeCancelableQueries = async (
-    queries: URLQuery[]
-  ): Promise<ExecuteFluxQueryResult[]> => {
-    this.handleCancelQueries()
-    this.executingQueries = executeQueries(queries, this.props.variables)
-
-    this.setState({
-      loading: RemoteDataState.Loading,
-      fetchCount: this.state.fetchCount + 1,
-      error: null,
-    })
-
-    return this.executingQueries.promise
   }
 
   private shouldReload(prevProps: Props) {

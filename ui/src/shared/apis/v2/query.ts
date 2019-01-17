@@ -134,6 +134,7 @@ export const executeQuery = (
   return {
     promise: deferred.promise,
     cancel: () => {
+      clearTimeout(interval)
       xhr.abort()
       deferred.reject(new CancellationError())
     },
