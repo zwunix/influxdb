@@ -36,6 +36,7 @@ import {
 import {setDefaultDashboard} from 'src/shared/actions/links'
 import {retainRangesDashTimeV1 as retainRangesDashTimeV1Action} from 'src/dashboards/actions/v2/ranges'
 import {notify as notifyAction} from 'src/shared/actions/notifications'
+import {readView} from 'src/dashboards/actions/v2/views'
 
 import {
   dashboardSetDefaultFailed,
@@ -49,7 +50,6 @@ import {DEFAULT_DASHBOARD_NAME} from 'src/dashboards/constants/index'
 
 // Types
 import {Notification} from 'src/types/notifications'
-import {DashboardFile} from 'src/types/v2/dashboards'
 import {Links, Cell, Dashboard, AppState, Organization} from 'src/types/v2'
 
 // Decorators
@@ -65,6 +65,7 @@ interface DispatchProps {
   retainRangesDashTimeV1: (dashboardIDs: string[]) => void
   onAddDashboardLabels: typeof addDashboardLabelsAsync
   onRemoveDashboardLabels: typeof removeDashboardLabelsAsync
+  onReadView: typeof readView
 }
 
 interface StateProps {
@@ -225,8 +226,30 @@ class DashboardIndex extends PureComponent<Props, State> {
 
   private modifyDashboardForDownload = async (
     dashboard: Dashboard
-  ): Promise<DashboardFile> => {
-    return {meta: {chronografVersion: '2.0'}, dashboard}
+  ): Promise<any> => {
+    const {onReadView} = this.props
+
+    const omittedCells = dashboard.cells.map(c => {
+      return _.pick(c, ['id', 'x', 'y', 'w', 'h'])
+    })
+    const omittedDashboard = _.pick(dashboard, ['name', 'description'])
+    const finalDashboard = {...omittedDashboard, cells: omittedCells}
+
+    const cells = dashboard.cells
+
+    const views = []
+    cells.forEach(cell => {
+      const view = onReadView(dashboard.id, cell.id)
+      views.push(view)
+    })
+
+    const vs = await Promise.all(views)
+    const finalViews = vs.map(v => _.pick(v, ['id', 'name', 'properties']))
+
+    return {
+      name: dashboard.name,
+      dashboards: [{dashboard: finalDashboard, views: finalViews}],
+    }
   }
 
   private handleImportDashboard = async (
@@ -321,6 +344,7 @@ const mdtp: DispatchProps = {
   retainRangesDashTimeV1: retainRangesDashTimeV1Action,
   onAddDashboardLabels: addDashboardLabelsAsync,
   onRemoveDashboardLabels: removeDashboardLabelsAsync,
+  onReadView: readView,
 }
 
 export default connect<StateProps, DispatchProps, OwnProps>(

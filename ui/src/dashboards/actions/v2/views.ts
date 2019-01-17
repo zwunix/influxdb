@@ -31,12 +31,13 @@ export const setView = (
 
 export const readView = (dashboardID: string, cellID: string) => async (
   dispatch: Dispatch<Action>
-): Promise<void> => {
+): Promise<View> => {
   dispatch(setView(cellID, null, RemoteDataState.Loading))
   try {
     const view = await readViewAJAX(dashboardID, cellID)
 
     dispatch(setView(cellID, view, RemoteDataState.Done))
+    return view
   } catch {
     dispatch(setView(cellID, null, RemoteDataState.Error))
   }
