@@ -8,7 +8,6 @@ import {executeQuery, ExecuteFluxQueryResult} from 'src/shared/apis/v2/query'
 
 // Utils
 import {parseResponse} from 'src/shared/parsing/flux/response'
-import {restartable, CancellationError} from 'src/utils/restartable'
 import {getSources, getActiveSource} from 'src/sources/selectors'
 import {renderQuery} from 'src/shared/utils/renderQuery'
 
@@ -16,21 +15,45 @@ import {renderQuery} from 'src/shared/utils/renderQuery'
 import {RemoteDataState, FluxTable} from 'src/types'
 import {DashboardQuery} from 'src/types/v2/dashboards'
 import {AppState, Source} from 'src/types/v2'
+import {WrappedCancelablePromise, CancellationError} from 'src/types/promises'
 
 type URLQuery = DashboardQuery & {url: string}
 
-const executeQueries = async (
+const executeQueries = (
   queries: URLQuery[],
   variables: {[key: string]: string}
-): Promise<ExecuteFluxQueryResult[]> => {
-  const promises = queries.map(async ({url, text, type}) => {
-    const renderedQuery = await renderQuery(text, type, variables)
-    const queryResult = await executeQuery(url, renderedQuery, type)
+): WrappedCancelablePromise<ExecuteFluxQueryResult[]> => {
+  let cancel: () => void
+  const cancelToken = new Promise<never>(
+    (_, reject) => (cancel = () => reject(new CancellationError()))
+  )
+  const promise = new Promise<ExecuteFluxQueryResult[]>(
+    async (resolve, reject) => {
+      let pendingQueries = []
+      try {
+        const renderingQueries = queries.map(async ({url, text, type}) => {
+          const renderedQuery = await Promise.race([
+            renderQuery(text, type, variables),
+            cancelToken,
+          ])
+          return executeQuery(url, renderedQuery, type)
+        })
 
-    return queryResult
-  })
+        pendingQueries = await Promise.all(renderingQueries)
 
-  return Promise.all(promises)
+        const results = Promise.all(pendingQueries.map(q => q.promise))
+        resolve(await Promise.race([results, cancelToken]))
+      } catch (error) {
+        if (error instanceof CancellationError) {
+          // abort on cancelation
+          pendingQueries.forEach(p => p.cancel())
+        }
+        reject(error)
+      }
+    }
+  )
+
+  return {promise, cancel}
 }
 
 export interface QueriesState {
@@ -84,7 +107,9 @@ class TimeSeries extends Component<Props, State> {
 
   public state: State = defaultState()
 
-  private executeQueries = restartable(executeQueries)
+  private executingQueries: WrappedCancelablePromise<
+    ExecuteFluxQueryResult[]
+  > = null
 
   public async componentDidMount() {
     this.reload()
@@ -121,7 +146,7 @@ class TimeSeries extends Component<Props, State> {
   }
 
   private reload = async () => {
-    const {inView, variables} = this.props
+    const {inView} = this.props
     const queries = this.queries
 
     if (!inView) {
@@ -142,7 +167,7 @@ class TimeSeries extends Component<Props, State> {
 
     try {
       const startTime = Date.now()
-      const results = await this.executeQueries(queries, variables)
+      const results = await this.executeCancelableQueries(queries)
       const duration = Date.now() - startTime
       const tables = flatten(results.map(r => parseResponse(r.csv)))
       const files = results.map(r => r.csv)
@@ -163,6 +188,28 @@ class TimeSeries extends Component<Props, State> {
         loading: RemoteDataState.Error,
       })
     }
+  }
+
+  private handleCancelQueries = () => {
+    if (this.executingQueries) {
+      this.executingQueries.cancel()
+      this.setState(defaultState())
+    }
+  }
+
+  private executeCancelableQueries = async (
+    queries: URLQuery[]
+  ): Promise<ExecuteFluxQueryResult[]> => {
+    this.handleCancelQueries()
+    this.executingQueries = executeQueries(queries, this.props.variables)
+
+    this.setState({
+      loading: RemoteDataState.Loading,
+      fetchCount: this.state.fetchCount + 1,
+      error: null,
+    })
+
+    return this.executingQueries.promise
   }
 
   private shouldReload(prevProps: Props) {

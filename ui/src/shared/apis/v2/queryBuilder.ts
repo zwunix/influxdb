@@ -1,6 +1,5 @@
 // Libraries
 import {get} from 'lodash'
-import uuid from 'uuid'
 
 // APIs
 import {executeQuery, ExecuteFluxQueryResult} from 'src/shared/apis/v2/query'
@@ -11,27 +10,28 @@ import {formatTagFilterCall} from 'src/shared/utils/queryBuilder'
 
 // Types
 import {InfluxLanguage, BuilderConfig} from 'src/types/v2'
+import {WrappedCancelablePromise} from 'src/types/promises'
 
 export const SEARCH_DURATION = '30d'
 export const LIMIT = 200
 
-async function findBuckets(url: string): Promise<string[]> {
+type CancelableQuery = WrappedCancelablePromise<string[]>
+
+function findBuckets(url: string): CancelableQuery {
   const query = `buckets()
   |> sort(columns: ["name"])
   |> limit(n: ${LIMIT})`
 
-  const resp = await executeQuery(url, query, InfluxLanguage.Flux)
-  const parsed = extractCol(resp, 'name')
-
-  return parsed
+  const response = executeQuery(url, query, InfluxLanguage.Flux)
+  return parseQuery(response, resp => extractCol(resp, 'name'))
 }
 
-async function findKeys(
+function findKeys(
   url: string,
   bucket: string,
   tagsSelections: BuilderConfig['tags'],
   searchTerm: string = ''
-): Promise<string[]> {
+): CancelableQuery {
   const tagFilters = formatTagFilterCall(tagsSelections)
   const searchFilter = formatSearchFilterCall(searchTerm)
   const previousKeyFilter = formatTagKeyFilterCall(tagsSelections)
@@ -42,27 +42,21 @@ async function findKeys(
   |> group()
   |> distinct()
   |> keep(columns: ["_value"])${searchFilter}${previousKeyFilter}
-  |> filter(fn: (r) =>
-        r._value != "_time" and
-        r._value != "_start" and
-        r._value !=  "_stop" and
-        r._value != "_value")
   |> sort()
   |> limit(n: ${LIMIT})`
 
-  const resp = await executeQuery(url, query, InfluxLanguage.Flux)
-  const parsed = extractCol(resp, '_value')
+  const response = executeQuery(url, query, InfluxLanguage.Flux)
 
-  return parsed
+  return parseQuery(response, resp => extractCol(resp, '_value'))
 }
 
-async function findValues(
+function findValues(
   url: string,
   bucket: string,
   tagsSelections: BuilderConfig['tags'],
   key: string,
   searchTerm: string = ''
-): Promise<string[]> {
+): CancelableQuery {
   const tagFilters = formatTagFilterCall(tagsSelections)
   const searchFilter = formatSearchFilterCall(searchTerm)
 
@@ -75,10 +69,9 @@ async function findValues(
     |> sort()
     |> limit(n: ${LIMIT})`
 
-  const resp = await executeQuery(url, query, InfluxLanguage.Flux)
-  const parsed = extractCol(resp, '_value')
+  const response = executeQuery(url, query, InfluxLanguage.Flux)
 
-  return parsed
+  return parseQuery(response, resp => extractCol(resp, '_value'))
 }
 
 function extractCol(resp: ExecuteFluxQueryResult, colName: string): string[] {
@@ -124,25 +117,28 @@ function formatSearchFilterCall(searchTerm: string) {
   return `\n  |> filter(fn: (r) => r._value =~ /(?i:${searchTerm})/)`
 }
 
-export class CancellationError extends Error {}
+function parseQuery(
+  query: WrappedCancelablePromise<ExecuteFluxQueryResult>,
+  parser: (result: ExecuteFluxQueryResult) => string[]
+): CancelableQuery {
+  const {promise: resp, cancel} = query
+  const parse = async result => parser(await result)
+
+  return {promise: parse(resp), cancel}
+}
 
 export class QueryBuilderFetcher {
-  private findBucketsToken: string = ''
-  private findKeysTokens = []
-  private findValuesTokens = []
+  private findBucketsQuery: CancelableQuery
+  private findKeysQueries: CancelableQuery[] = []
+  private findValuesQueries: CancelableQuery[] = []
 
   public async findBuckets(url: string): Promise<string[]> {
-    const token = uuid.v4()
-
-    this.findBucketsToken = token
-
-    const result = await findBuckets(url)
-
-    if (token !== this.findBucketsToken) {
-      throw new CancellationError()
+    if (this.findBucketsQuery) {
+      this.findBucketsQuery.cancel()
     }
+    this.findBucketsQuery = findBuckets(url)
 
-    return result
+    return this.findBucketsQuery.promise
   }
 
   public async findKeys(
@@ -152,21 +148,20 @@ export class QueryBuilderFetcher {
     tagsSelections: BuilderConfig['tags'],
     searchTerm: string = ''
   ): Promise<string[]> {
-    const token = uuid.v4()
-
-    this.findKeysTokens[index] = token
-
-    const result = await findKeys(url, bucket, tagsSelections, searchTerm)
-
-    if (token !== this.findKeysTokens[index]) {
-      throw new CancellationError()
-    }
-
-    return result
+    this.cancelFindKeys(index)
+    this.findKeysQueries[index] = findKeys(
+      url,
+      bucket,
+      tagsSelections,
+      searchTerm
+    )
+    return this.findKeysQueries[index].promise
   }
 
   public cancelFindKeys(index) {
-    this.findKeysTokens[index] = uuid.v4()
+    if (this.findKeysQueries[index]) {
+      this.findKeysQueries[index].cancel()
+    }
   }
 
   public async findValues(
@@ -177,26 +172,20 @@ export class QueryBuilderFetcher {
     key: string,
     searchTerm: string = ''
   ): Promise<string[]> {
-    const token = uuid.v4()
-
-    this.findValuesTokens[index] = token
-
-    const result = await findValues(
+    this.cancelFindValues(index)
+    this.findValuesQueries[index] = findValues(
       url,
       bucket,
       tagsSelections,
       key,
       searchTerm
     )
-
-    if (token !== this.findValuesTokens[index]) {
-      throw new CancellationError()
-    }
-
-    return result
+    return this.findValuesQueries[index].promise
   }
 
   public cancelFindValues(index) {
-    this.findValuesTokens[index] = uuid.v4()
+    if (this.findValuesQueries[index]) {
+      this.findValuesQueries[index].cancel()
+    }
   }
 }
