@@ -524,6 +524,7 @@ func IntersectSeriesIDIterators(itr0, itr1 SeriesIDIterator) SeriesIDIterator {
 	if a := NewSeriesIDSetIterators([]SeriesIDIterator{itr0, itr1}); a != nil {
 		itr0.Close()
 		itr1.Close()
+		// fmt.Println(a[0].SeriesIDSet().And(a[1].SeriesIDSet()).Cardinality(), "asfd")
 		return NewSeriesIDSetIterator(a[0].SeriesIDSet().And(a[1].SeriesIDSet()))
 	}
 

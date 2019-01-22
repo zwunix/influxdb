@@ -380,8 +380,11 @@ func (e *TagBlockValueElem) SeriesIDSet() (*tsdb.SeriesIDSet, error) {
 		if err := ss.UnmarshalBinaryUnsafe(e.seriesIDSetData); err != nil {
 			return nil, err
 		}
+		// fmt.Println("WE HAVE IT!!!!", ss.Cardinality())
 		return ss, nil
 	}
+
+	// fmt.Println("WE DON'T HAVE IT :(")
 
 	// Otherwise decode series ids from uvarint encoding.
 	var prev uint64

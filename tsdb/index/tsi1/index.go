@@ -1022,6 +1022,7 @@ func (i *Index) TagValueSeriesIDIterator(name, key, value []byte) (tsdb.SeriesID
 		ss.SetCOW(true) // This is important to speed the clone up.
 		i.tagValueCache.Put(name, key, value, ss)
 	}
+	// fmt.Println("returning", itr)
 	return itr, nil
 }
 

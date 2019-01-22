@@ -128,11 +128,12 @@ func (f *IndexFile) Open() error {
 // Close unmaps the data file.
 func (f *IndexFile) Close() error {
 	// Wait until all references are released.
-	f.wg.Wait()
+	// f.wg.Wait()
 
 	f.sfile = nil
 	f.tblks = nil
 	f.mblk = MeasurementBlock{}
+	// fmt.Println("unmapping data")
 	return mmap.Unmap(f.data)
 }
 
@@ -149,10 +150,10 @@ func (f *IndexFile) SetPath(path string) { f.path = path }
 func (f *IndexFile) Level() int { return f.level }
 
 // Retain adds a reference count to the file.
-func (f *IndexFile) Retain() { f.wg.Add(1) }
+func (f *IndexFile) Retain() { /* f.wg.Add(1) */ }
 
 // Release removes a reference count from the file.
-func (f *IndexFile) Release() { f.wg.Done() }
+func (f *IndexFile) Release() { /*f.wg.Done()*/ }
 
 // Size returns the size of the index file, in bytes.
 func (f *IndexFile) Size() int64 { return int64(len(f.data)) }

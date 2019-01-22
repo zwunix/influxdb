@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/tsdb"
@@ -464,6 +466,99 @@ func TestIndex_TagValueSeriesIDIterator(t *testing.T) {
 	t.Run("no matching series", func(t *testing.T) {
 		testTagValueSeriesIDIterator(t, "foo", "bar", "zoo", nil)
 	})
+}
+
+func TestIndex_SeriesIDSetUmap(t *testing.T) {
+	var err error
+	tsi1.EnableBitsetCache = false
+	test := func(idx *tsi1.Index) error {
+		fmt.Println("first iter")
+		itra, err := idx.TagValueSeriesIDIterator([]byte("m0"), []byte("tag0"), []byte("value0"))
+		if err != nil {
+			return err
+		}
+
+		var ssa *tsdb.SeriesIDSet
+		if ssitr, ok := itra.(tsdb.SeriesIDSetIterator); ok {
+			ssa = ssitr.SeriesIDSet()
+		}
+
+		fmt.Println("second inter")
+		itrb, err := idx.TagValueSeriesIDIterator([]byte("m0"), []byte("tag0"), []byte("value0"))
+		if err != nil {
+			return err
+		}
+
+		var ssb *tsdb.SeriesIDSet
+		if ssitr, ok := itrb.(tsdb.SeriesIDSetIterator); ok {
+			ssb = ssitr.SeriesIDSet()
+		}
+
+		fmt.Println(ssa.Cardinality())
+		fmt.Println(ssb.Cardinality())
+
+		fmt.Println("intersect iter")
+		var ssc *tsdb.SeriesIDSet
+		itrc := tsdb.IntersectSeriesIDIterators(itra, itrb)
+		if ssitr, ok := itrc.(tsdb.SeriesIDSetIterator); ok {
+			ssc = ssitr.SeriesIDSet()
+		}
+		fmt.Println("intersect ", ssc.Cardinality())
+		return nil
+	}
+
+	for i := 0; i < 1000; i++ {
+		sfile := NewSeriesFile()
+		// Load index
+		idx := tsi1.NewIndex(sfile.SeriesFile, "foo",
+			tsi1.WithPath("testdata/index-file-index"),
+			tsi1.DisableCompactions(),
+		)
+
+		fmt.Println("Open index")
+		if err = idx.Open(); err != nil {
+			t.Fatal(err)
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		errC := make(chan error, 1)
+		go func() {
+			defer wg.Done()
+			errC <- test(idx)
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			n := rand.Intn(1000)
+			time.Sleep(time.Microsecond * time.Duration(n))
+			fmt.Println("CLOSE INDEX")
+			if err := idx.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		wg.Wait()
+
+		sfile.Close()
+		if err := <-errC; err != nil {
+			t.Log(err)
+		}
+	}
+	t.FailNow()
+	// var e tsdb.SeriesIDElem
+	// var count int64
+	// for e, err = itrc.Next(); err != nil; e, err = itrc.Next() {
+	// 	if e.SeriesID == 0 {
+	// 		break
+	// 	}
+	// 	count++
+	// }
+	// fmt.Println(count)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 }
 
 // Index is a test wrapper for tsi1.Index.
