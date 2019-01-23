@@ -244,7 +244,11 @@ class DashboardIndex extends PureComponent<Props, State> {
     })
 
     const vs = await Promise.all(views)
-    const finalViews = vs.map(v => _.pick(v, ['id', 'name', 'properties']))
+    // const finalViews = vs.map(v => _.pick(v, ['id', 'name', 'properties']))
+    const finalViews = {}
+    vs.forEach(v => {
+      finalViews[v.id] = _.pick(v, ['id', 'name', 'properties'])
+    })
 
     return {
       name: dashboard.name,
