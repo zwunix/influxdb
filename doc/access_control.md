@@ -21,10 +21,10 @@ subject type, subject id, and set of actions allowed.
 
 As an example consider the table below
 
-| ResourceType | ResourceID | SubjectType | SubjectID | Actions    |
-|--------------|------------|-------------|-----------|------------|
-| Dashboard    | 1          | User        | 1         | write      |
-| Dashboard    | 1          | Token       | 1         | read       |
+| Resource     | Subject | Actions    |
+|--------------|---------|------------|
+| Dashboard  1 | User  1 | write      |
+| Dashboard  1 | Token 1 | read       |
 
 In this example, the following statements are true
 
@@ -35,10 +35,10 @@ It is possible however for access to be granted transitively through an organiza
 
 For example, consider the following table
 
-| ResourceType | ResourceID | SubjectType | SubjectID | Actions    |
-|--------------|------------|-------------|-----------|------------|
-| Dashboard    | 1          | Org         | 1         | read,write |
-| Org          | 1          | User        | 1         | read       |
+| Resource    | Subject | Actions    |
+|-------------|---------|------------|
+| Dashboard 1 | Org  1  | read,write |
+| Org 1       | User 1  | read       |
 
 In this example, the following statements are true
  * `Org 1` is granted `read,write` access to `Dashboard 1`
@@ -52,7 +52,9 @@ It should be noted that this model is functionally equivalent to a minimal role 
 
 ## Performing an action against a class of resource
 
-TODO: Who should be allowed to perform actions against top level resources. Specifically, who can create new users or orgs.
+| Resource         | Subject | Actions    |
+|------------------|---------|------------|
+| Org 1 Dashboards | User 1  | read,write |
 
 ## Retrieving all resources subject is authorized to access
 
@@ -105,6 +107,8 @@ With two compound indexes.
 
 * ACL - index of `(ResourceType, ResourceID, SubjectType, SubjectID)`
 * IACL - index of `(SubjectType, SubjectID, ResourceType, ResourceID)`
+
+// TODO(desa) why these indexes?
 
 
 ### Subjects
