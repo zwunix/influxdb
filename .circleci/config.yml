@@ -30,7 +30,7 @@ jobs:
 
       - run: make test-js
       - run: make chronograf_lint
-#test commnent, test comment
+#test commnent, test comment, test comment
   gotest:
     docker:
       - image: circleci/golang:1.11
