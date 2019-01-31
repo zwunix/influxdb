@@ -10,6 +10,7 @@ import TimeMachineBottom from 'src/timeMachine/components/TimeMachineBottom'
 import TimeMachineVis from 'src/timeMachine/components/Vis'
 import TimeSeries from 'src/shared/components/TimeSeries'
 import ViewOptions from 'src/timeMachine/components/view_options/ViewOptions'
+import VegaVis from 'src/timeMachine/components/VegaVis'
 
 // Utils
 import {getActiveTimeMachine} from 'src/timeMachine/selectors'
@@ -24,11 +25,21 @@ import 'src/timeMachine/components/TimeMachine.scss'
 
 const INITIAL_RESIZER_HANDLE = 0.5
 
+const parseOrEmpty = (s: string) => {
+  try {
+    const obj = JSON.parse(s)
+    return obj
+  } catch (e) {
+    return {}
+  }
+}
+
 interface StateProps {
   queries: DashboardQuery[]
   submitToken: number
   timeRange: TimeRange
   activeTab: TimeMachineTab
+  vegaObj: object
 }
 
 interface State {
@@ -47,12 +58,13 @@ class TimeMachine extends Component<Props, State> {
   }
 
   public render() {
-    const {queries, submitToken, timeRange} = this.props
+    const {queries, submitToken, timeRange, vegaObj} = this.props
     const {resizerHandlePosition} = this.state
+    console.log('rendering... Time Machine')
 
     return (
       <>
-        <div className={this.containerClassName}>
+        <div className="time-machine time-machine--split">
           <TimeSeries
             queries={queries}
             submitToken={submitToken}
@@ -67,7 +79,8 @@ class TimeMachine extends Component<Props, State> {
               >
                 <DraggableResizer.Panel>
                   <div className="time-machine--top">
-                    <TimeMachineVis queriesState={queriesState} />
+                    {/* <TimeMachineVis queriesState={queriesState} /> */}
+                    <VegaVis tables={queriesState.tables} vegaObj={vegaObj} />
                   </div>
                 </DraggableResizer.Panel>
                 <DraggableResizer.Panel>
@@ -83,11 +96,11 @@ class TimeMachine extends Component<Props, State> {
   }
 
   private get viewOptions(): JSX.Element {
-    const {activeTab} = this.props
+    // const {activeTab} = this.props
 
-    if (activeTab === TimeMachineTab.Visualization) {
-      return <ViewOptions />
-    }
+    // if (activeTab === TimeMachineTab.Visualization) {
+    return <ViewOptions />
+    // }
   }
 
   private handleResizerChange = resizerHandlePosition => {
@@ -110,7 +123,9 @@ const mstp = (state: AppState) => {
   const queries = get(timeMachine, 'view.properties.queries', [])
   const submitToken = timeMachine.submitToken
 
-  return {queries, submitToken, timeRange, activeTab}
+  const vegaObj = parseOrEmpty(state.timeMachines.vegaOptions)
+
+  return {queries, submitToken, timeRange, activeTab, vegaObj}
 }
 
 export default connect<StateProps, {}, {}>(

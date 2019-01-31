@@ -55,6 +55,7 @@ export interface TimeMachineState {
 }
 
 export interface TimeMachinesState {
+  vegaOptions: string
   activeTimeMachineID: string
   timeMachines: {
     [timeMachineID: string]: TimeMachineState
@@ -86,6 +87,7 @@ export const initialStateHelper = (): TimeMachineState => ({
 })
 
 export const initialState = (): TimeMachinesState => ({
+  vegaOptions: '{}',
   activeTimeMachineID: DE_TIME_MACHINE_ID,
   timeMachines: {
     [VEO_TIME_MACHINE_ID]: initialStateHelper(),
@@ -123,6 +125,12 @@ export const timeMachinesReducer = (
         },
       },
     }
+  }
+
+  if (action.type === 'SET_VEGA_OPTIONS') {
+    const {vegaOptions} = action.payload
+
+    return {...state, vegaOptions}
   }
 
   // All other actions act upon whichever single `TimeMachineState` is

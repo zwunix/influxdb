@@ -23,6 +23,7 @@ export type Action =
   | SetNameAction
   | SetTimeRangeAction
   | SetTypeAction
+  | SetVegaOptionsAction
   | SetActiveQueryText
   | SubmitScriptAction
   | SetIsViewingRawDataAction
@@ -111,6 +112,16 @@ interface SetTypeAction {
 export const setType = (type: ViewType): SetTypeAction => ({
   type: 'SET_VIEW_TYPE',
   payload: {type},
+})
+
+interface SetVegaOptionsAction {
+  type: 'SET_VEGA_OPTIONS'
+  payload: {vegaOptions: string}
+}
+
+export const setVegaOptions = (vegaOptions: string): SetVegaOptionsAction => ({
+  type: 'SET_VEGA_OPTIONS',
+  payload: {vegaOptions},
 })
 
 interface SetActiveQueryText {
