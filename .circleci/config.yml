@@ -118,7 +118,7 @@ jobs:
     steps:
       - checkout
 
-      # Speed up `make nightly` by restoring caches from previous runs.
+      # Speed up `make nightly` by restoring caches from previous runs..
       - restore_cache:
           name: Restoring GOCACHE
           keys:
