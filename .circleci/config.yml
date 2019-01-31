@@ -5,7 +5,7 @@ jobs:
     steps:
       - run:
           name: Create influxdb dir for binaries
-          command: mkdir go/src/github.com/influxdata/influxdb
+          command: mkdir -p go/src/github.com/influxdata/influxdb
       - restore_cache:
           name: Restoring influxdb binaries
           keys:
