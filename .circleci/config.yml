@@ -177,12 +177,6 @@ workflows:
       - gotest
       - jstest
       - build
-      - store_artifacts
-          path: /tmp/artifact-1
-          destination: artifact-file 
-        
-       - store_artifacts:
-          path: /tmp/artifacts
 
   nightly:
     triggers:
