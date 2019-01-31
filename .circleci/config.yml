@@ -3,8 +3,12 @@ jobs:
   litmus_nightly:
     machine: true
     steps:
+      - restore_cache:
+        name: Restoring influxdb binaries
+        keys:
+          - influxdb-binaries-{{ .Branch }}-{{ .Revision }}
       - run: docker login -u=$QUAY_USER -p=$QUAY_PASS quay.io
-      - run: docker run --entrypoint "./run_litmus_tests_oss.sh" -e TEST_LIST=tests_lists/gateway_api_tests.list --net host -v /var/run/docker.sock:/var/run/docker.sock -v ~/project:/Litmus/result quay.io/influxdb/litmus:latest
+      #- run: docker run --entrypoint "./run_litmus_tests_oss.sh" -e TEST_LIST=tests_lists/gateway_api_tests.list --net host -v /var/run/docker.sock:/var/run/docker.sock -v ~/project:/Litmus/result quay.io/influxdb/litmus:latest
       - store_artifacts:
           path: ~/project
   
@@ -106,7 +110,17 @@ jobs:
           name: Restore Yarn package cache
           keys:
             - chronograf-npm-packages-{{ checksum "ui/package-lock.json" }}
+      - restore_cache: 
+          name: Restore Influx Binaries
+          keys:
+            - influxdb-binaries-{{ .Branch }}-{{ .Revision }}
       - run: make build
+      - save_cache:
+          name: Save influxd and influx binaries
+          key: influxdb-binaries-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - bin/linux    
+          when: always
 
   deploy-nightly:
     docker:
@@ -177,6 +191,9 @@ workflows:
       - gotest
       - jstest
       - build
+      - litmus_nightly:
+          requires:
+            - build
 
   nightly:
     triggers:
