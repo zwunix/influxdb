@@ -26,6 +26,7 @@ import TasksPage from 'src/tasks/containers/TasksPage'
 import OrganizationsIndex from 'src/organizations/containers/OrganizationsIndex'
 import OrganizationView from 'src/organizations/containers/OrganizationView'
 import TaskEditPage from 'src/tasks/containers/TaskEditPage'
+import TracesPage from 'src/tracing/components/TracesPage'
 import DashboardPage from 'src/dashboards/components/DashboardPage'
 import DashboardsIndex from 'src/dashboards/components/dashboard_index/DashboardsIndex'
 import DataExplorerPage from 'src/dataExplorer/components/DataExplorerPage'
@@ -123,6 +124,7 @@ class Root extends PureComponent {
                               />
                             </Route>
                             <Route path="me" component={MePage} />
+                            <Route path="tracing" component={TracesPage} />
                             <Route path="account/:tab" component={Account} />
                             <Route path="sources" component={SourcesPage} />
                             <Route

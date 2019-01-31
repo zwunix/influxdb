@@ -40,6 +40,13 @@ class SideNav extends PureComponent<Props> {
     return (
       <NavMenu>
         <NavMenu.Item
+          title="Traces"
+          link="/tracing"
+          icon={IconFont.Zap}
+          location={location.pathname}
+          highlightWhen={['tracing']}
+        />
+        <NavMenu.Item
           title={me.name}
           link="/me"
           icon={IconFont.CuboNav}
