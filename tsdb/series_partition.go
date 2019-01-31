@@ -72,8 +72,10 @@ func (p *SeriesPartition) Open() error {
 	}
 
 	// Create path if it doesn't exist.
-	if err := os.MkdirAll(filepath.Join(p.path), 0777); err != nil {
-		return err
+	if p.path != "" {
+		if err := os.MkdirAll(filepath.Join(p.path), 0777); err != nil {
+			return err
+		}
 	}
 
 	// Open components.
@@ -103,22 +105,24 @@ func (p *SeriesPartition) Open() error {
 }
 
 func (p *SeriesPartition) openSegments() error {
-	fis, err := ioutil.ReadDir(p.path)
-	if err != nil {
-		return err
-	}
-
-	for _, fi := range fis {
-		segmentID, err := ParseSeriesSegmentFilename(fi.Name())
+	if p.path != "" {
+		fis, err := ioutil.ReadDir(p.path)
 		if err != nil {
-			continue
-		}
-
-		segment := NewSeriesSegment(segmentID, filepath.Join(p.path, fi.Name()))
-		if err := segment.Open(); err != nil {
 			return err
 		}
-		p.segments = append(p.segments, segment)
+
+		for _, fi := range fis {
+			segmentID, err := ParseSeriesSegmentFilename(fi.Name())
+			if err != nil {
+				continue
+			}
+
+			segment := NewSeriesSegment(segmentID, filepath.Join(p.path, fi.Name()))
+			if err := segment.Open(); err != nil {
+				return err
+			}
+			p.segments = append(p.segments, segment)
+		}
 	}
 
 	// Find max series id by searching segments in reverse order.
@@ -132,7 +136,7 @@ func (p *SeriesPartition) openSegments() error {
 
 	// Create initial segment if none exist.
 	if len(p.segments) == 0 {
-		segment, err := CreateSeriesSegment(0, filepath.Join(p.path, "0000"))
+		segment, err := CreateSeriesSegment(0, p.SegmentPath(0))
 		if err != nil {
 			return err
 		}
@@ -177,7 +181,23 @@ func (p *SeriesPartition) ID() int { return p.id }
 func (p *SeriesPartition) Path() string { return p.path }
 
 // IndexPath returns the path to the series index.
-func (p *SeriesPartition) IndexPath() string { return filepath.Join(p.path, "index") }
+func (p *SeriesPartition) IndexPath() string {
+	if p.IsInMemory() {
+		return ""
+	}
+	return filepath.Join(p.path, "index")
+}
+
+// SegmentPath returns the path to the segment with the given id.
+func (p *SeriesPartition) SegmentPath(id uint16) string {
+	if p.IsInMemory() {
+		return ""
+	}
+	return filepath.Join(p.path, fmt.Sprintf("%04x", id))
+}
+
+// IsInMemory returns true if the partition is not backed by a file.
+func (p *SeriesPartition) IsInMemory() bool { return p.path == "" }
 
 // CreateSeriesListIfNotExists creates a list of series in bulk if they don't exist.
 // The ids parameter is modified to contain series IDs for all keys belonging to this partition.
@@ -466,7 +486,7 @@ func (p *SeriesPartition) EnableCompactions() {
 }
 
 func (p *SeriesPartition) compactionsEnabled() bool {
-	return p.compactionsDisabled == 0
+	return p.compactionsDisabled == 0 && !p.IsInMemory()
 }
 
 // AppendSeriesIDs returns a list of all series ids.
@@ -522,10 +542,9 @@ func (p *SeriesPartition) createSegment() (*SeriesSegment, error) {
 	if len(p.segments) > 0 {
 		id = p.segments[len(p.segments)-1].ID() + 1
 	}
-	filename := fmt.Sprintf("%04x", id)
 
 	// Generate new empty segment.
-	segment, err := CreateSeriesSegment(id, filepath.Join(p.path, filename))
+	segment, err := CreateSeriesSegment(id, p.SegmentPath(id))
 	if err != nil {
 		return nil, err
 	}

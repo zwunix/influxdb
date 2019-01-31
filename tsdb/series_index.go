@@ -71,6 +71,10 @@ func NewSeriesIndex(path string) *SeriesIndex {
 func (idx *SeriesIndex) Open() (err error) {
 	// Map data file, if it exists.
 	if err := func() error {
+		if idx.path == "" {
+			return nil
+		}
+
 		if _, err := os.Stat(idx.path); err != nil && !os.IsNotExist(err) {
 			return err
 		} else if err == nil {

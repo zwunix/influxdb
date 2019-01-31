@@ -89,8 +89,10 @@ func (f *SeriesFile) Open() error {
 	defer f.refs.Unlock()
 
 	// Create path if it doesn't exist.
-	if err := os.MkdirAll(filepath.Join(f.path), 0777); err != nil {
-		return err
+	if f.path != "" {
+		if err := os.MkdirAll(filepath.Join(f.path), 0777); err != nil {
+			return err
+		}
 	}
 
 	// Initialise metrics for trackers.
@@ -146,8 +148,8 @@ func (f *SeriesFile) Open() error {
 // Close unmaps the data file.
 func (f *SeriesFile) Close() (err error) {
 	// Wait for all references to be released and prevent new ones from being acquired.
-	f.refs.Lock()
-	defer f.refs.Unlock()
+	// f.refs.Lock()
+	// defer f.refs.Unlock()
 
 	for _, p := range f.partitions {
 		if e := p.Close(); e != nil && err == nil {
@@ -161,8 +163,14 @@ func (f *SeriesFile) Close() (err error) {
 // Path returns the path to the file.
 func (f *SeriesFile) Path() string { return f.path }
 
+// IsInMemory returns true if the series file is not backed by a file.
+func (f *SeriesFile) IsInMemory() bool { return f.path == "" }
+
 // SeriesPartitionPath returns the path to a given partition.
 func (f *SeriesFile) SeriesPartitionPath(i int) string {
+	if f.path == "" {
+		return ""
+	}
 	return filepath.Join(f.path, fmt.Sprintf("%02x", i))
 }
 

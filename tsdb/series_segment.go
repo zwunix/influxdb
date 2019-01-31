@@ -55,8 +55,33 @@ func NewSeriesSegment(id uint16, path string) *SeriesSegment {
 	}
 }
 
+// NewSeriesSegmentBuffer returns a new instance of SeriesSegment with an in-memory buffer.
+func NewSeriesSegmentBuffer(id uint16, data []byte) *SeriesSegment {
+	return &SeriesSegment{
+		id:   id,
+		data: data,
+	}
+}
+
 // CreateSeriesSegment generates an empty segment at path.
 func CreateSeriesSegment(id uint16, path string) (*SeriesSegment, error) {
+	// If created as an in-memory buffer, skip the file system calls.
+	if path == "" {
+		data := make([]byte, SeriesSegmentSize(id))
+
+		// Write header to file and close.
+		hdr := NewSeriesSegmentHeader()
+		if _, err := hdr.WriteTo(&bytesWriter{data: data}); err != nil {
+			return nil, err
+		}
+
+		segment := NewSeriesSegmentBuffer(id, data)
+		if err := segment.Open(); err != nil {
+			return nil, err
+		}
+		return segment, nil
+	}
+
 	// Generate segment in temp location.
 	f, err := os.Create(path + ".initializing")
 	if err != nil {
@@ -91,8 +116,10 @@ func CreateSeriesSegment(id uint16, path string) (*SeriesSegment, error) {
 func (s *SeriesSegment) Open() error {
 	if err := func() (err error) {
 		// Memory map file data.
-		if s.data, err = mmap.Map(s.path, int64(SeriesSegmentSize(s.id))); err != nil {
-			return err
+		if !s.IsInMemory() {
+			if s.data, err = mmap.Map(s.path, int64(SeriesSegmentSize(s.id))); err != nil {
+				return err
+			}
 		}
 
 		// Read header.
@@ -125,12 +152,17 @@ func (s *SeriesSegment) InitForWrite() (err error) {
 	}
 
 	// Open file handler for writing & seek to end of data.
-	if s.file, err = os.OpenFile(s.path, os.O_WRONLY|os.O_CREATE, 0666); err != nil {
-		return err
-	} else if _, err := s.file.Seek(int64(s.size), io.SeekStart); err != nil {
-		return err
+	const size = 32 * 1024
+	if s.IsInMemory() {
+		s.w = bufio.NewWriterSize(&bytesWriter{data: s.data[s.size:]}, size)
+	} else {
+		if s.file, err = os.OpenFile(s.path, os.O_WRONLY|os.O_CREATE, 0666); err != nil {
+			return err
+		} else if _, err := s.file.Seek(int64(s.size), io.SeekStart); err != nil {
+			return err
+		}
+		s.w = bufio.NewWriterSize(s.file, size)
 	}
-	s.w = bufio.NewWriterSize(s.file, 32*1024)
 
 	return nil
 }
@@ -142,8 +174,10 @@ func (s *SeriesSegment) Close() (err error) {
 	}
 
 	if s.data != nil {
-		if e := mmap.Unmap(s.data); e != nil && err == nil {
-			err = e
+		if !s.IsInMemory() {
+			if e := mmap.Unmap(s.data); e != nil && err == nil {
+				err = e
+			}
 		}
 		s.data = nil
 	}
@@ -180,6 +214,9 @@ func (s *SeriesSegment) Size() int64 { return int64(s.size) }
 
 // Slice returns a byte slice starting at pos.
 func (s *SeriesSegment) Slice(pos uint32) []byte { return s.data[pos:] }
+
+// IsInMemory returns true if the file is not backed by a file.
+func (s *SeriesSegment) IsInMemory() bool { return s.path == "" }
 
 // WriteLogEntry writes entry data into the segment.
 // Returns the offset of the beginning of the entry.
@@ -406,4 +443,14 @@ func IsValidSeriesEntryFlag(flag byte) bool {
 	default:
 		return false
 	}
+}
+
+type bytesWriter struct {
+	data []byte
+}
+
+func (w *bytesWriter) Write(data []byte) (n int, err error) {
+	copy(w.data, data)
+	w.data = w.data[len(data):]
+	return len(data), nil
 }
