@@ -107,6 +107,8 @@ jobs:
           keys:
             - chronograf-npm-packages-{{ checksum "ui/package-lock.json" }}
       - run: make build
+      - store_artifacts:
+          path: bin/linux
 
   deploy-nightly:
     docker:
@@ -174,8 +176,8 @@ workflows:
   version: 2
   build:
     jobs:
-      - gotest
-      - jstest
+     # - gotest
+     # - jstest
       - build
 
   nightly:
@@ -224,22 +226,3 @@ workflows:
               ignore: /.*/
             tags:
               only: /^v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$/
-  test:
-       jobs:
-  build:
-
-    working_directory: /tmp
-    steps:
-      - run:
-          name: Creating Dummy Artifacts
-          command: |
-            echo "my artifact file" > /tmp/artifact-1;
-            mkdir /tmp/artifacts;
-            echo "my artifact files in a dir" > /tmp/artifacts/artifact-2;
-
-      - store_artifacts:
-          path: /tmp/artifact-1
-          destination: artifact-file
-
-      - store_artifacts:
-          path: /tmp/artifacts
