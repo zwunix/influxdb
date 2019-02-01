@@ -3,13 +3,8 @@ jobs:
   litmus_nightly:
     machine: true
     steps:
-      - run:
-          name: Create influxdb dir for binaries
-          command: mkdir -p /go/src/github.com/influxdata/influxdb
-      - restore_cache:
-          name: Restoring influxdb binaries
-          keys:
-            - influxdb-binaries-{{ .Branch }}-{{ .Revision }}
+      - attach_workspce:
+          at: /go/src/github.com/influxdata/influxdb/tmp 
       - run: docker login -u=$QUAY_USER -p=$QUAY_PASS quay.io
       #- run: docker run --entrypoint "./run_litmus_tests_oss.sh" -e TEST_LIST=tests_lists/gateway_api_tests.list --net host -v /var/run/docker.sock:/var/run/docker.sock -v ~/project:/Litmus/result quay.io/influxdb/litmus:latest
       - store_artifacts:
@@ -118,6 +113,10 @@ jobs:
           keys:
             - influxdb-binaries-{{ .Branch }}-{{ .Revision }}
       - run: make build
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - bin/linux/influxd
       - save_cache:
           name: Save influxd and influx binaries
           key: influxdb-binaries-{{ .Branch }}-{{ .Revision }}
