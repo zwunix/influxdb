@@ -6,7 +6,7 @@ jobs:
       - attach_workspace:
           at: ~/project
       - run: |
-          ls -l
+          ls -lR
           pwd
       - run: docker login -u=$QUAY_USER -p=$QUAY_PASS quay.io
       #- run: docker run --entrypoint "./run_litmus_tests_oss.sh" -e TEST_LIST=tests_lists/gateway_api_tests.list --net host -v /var/run/docker.sock:/var/run/docker.sock -v ~/project:/Litmus/result quay.io/influxdb/litmus:latest
