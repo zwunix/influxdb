@@ -1,10 +1,15 @@
 version: 2
+references:
+  workspace_root: &workspace_root
+    /tmp/workspace
+  attach_workspace: &attach_workspace
+    attach_workspace:
+      at: *workspace_root
 jobs:
   litmus_nightly:
     machine: true
     steps:
-      - attach_workspace:
-          at: /go/src/github.com/influxdata/influxdb/bin/linux
+      - *attach_workspace:
       - run: docker login -u=$QUAY_USER -p=$QUAY_PASS quay.io
       #- run: docker run --entrypoint "./run_litmus_tests_oss.sh" -e TEST_LIST=tests_lists/gateway_api_tests.list --net host -v /var/run/docker.sock:/var/run/docker.sock -v ~/project:/Litmus/result quay.io/influxdb/litmus:latest
       - store_artifacts:
@@ -114,7 +119,7 @@ jobs:
             - influxdb-binaries-{{ .Branch }}-{{ .Revision }}
       - run: make build
       - persist_to_workspace:
-          root: /go/src/github.com/influxdata/influxdb
+          root: *workspace_root
           paths:
             - bin/linux/influxd
       - save_cache:
