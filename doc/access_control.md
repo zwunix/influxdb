@@ -52,8 +52,8 @@ It should be noted that this model is functionally equivalent to a minimal role 
 
 ## Performing an action against a class of resource
 
-Performing actions against a class of resource is and should be equivalent to performing actions against a specific resource.
-The difference being that the resource is descriptive of the class. It should be noted that we need only grant write/create permissions
+Performing actions against a class of resource is equivalent to performing actions against a specific resource.
+The only difference is that the resource is descriptive of the class. It should be noted that we need only grant write/create actions
 the resource class as the only action we need to express is `User 1` is authorized to create dashboards for `Org 1` (as access to all of an org
 dashboards can be acheived by trasitive access of the org).
 
@@ -100,11 +100,11 @@ Just as in the ACL, a subject may have access transitively though an organizatio
 
 For example, consider
 
-| SubjectType | SubjectID | ResourceType | ResourceID |
-|-------------|-----------|--------------|------------|
-| Org         | 1         | Dashboard    | 1          |
-| User        | 1         | Dashboard    | 2          |
-| User        | 1         | Org          | 1          |
+| Subject | Resource     |
+|---------|--------------|
+| Org 1   | Dashboard  1 |
+| User 1  | Dashboard  2 |
+| User 1  | Org        1 |
 
 In this example
 
@@ -118,7 +118,7 @@ the list of all resources a subject can access.
 
 ## Notes
 
-### ACL
+### Structure
 Conceptually, the ACL and IACL described above can be thought of as a table
 
 | ResourceType | ResourceID | SubjectType | SubjectID | Actions    |
@@ -126,33 +126,28 @@ Conceptually, the ACL and IACL described above can be thought of as a table
 
 With two compound indexes.
 
-* ACL - index of `(ResourceType, ResourceID, SubjectType, SubjectID)`
-* IACL - index of `(SubjectType, SubjectID, ResourceType, ResourceID)`
-
-// TODO(desa) why these indexes?
-
+* ACL - index of `(ResourceType, ResourceID, SubjectType, SubjectID)` for the authorization of a specific action against a specific resource
+* IACL - index of `(SubjectType, SubjectID, ResourceType, ResourceID)` for retrieval of the list of all resources I'm authorized to access
 
 ### Subjects
 #### Tokens
-// TODO(desa)
 Tokens have a set of permissions, those permissions are used to create entries into the ACL and IACL.
 
-Upon revokation, each entry of a tokens entries in the ACL and IACL is removed. Provided that token revocation
+Upon revocation, each entry of a tokens entries in the ACL and IACL is removed. Provided that token revocation
 should be relatively rare, the cost of this opperation should not be an issue. If it becomes an issue, we can simply
 note at a higher level that the token is no longer valid and reject the request at a different level and clean up
-revoked token log entries as a background task.
+revoked token entries in the background.
 
 #### Orgs and Users
-// TODO(desa)
-Orgs and users will have to be added and removed to resources through an endpoint associated with the resource
+Orgs and users will have to be added and removed to a resource through an endpoint associated with the resource.
 
-possibly something along the lines of `/dashboards/:id/access` (this will only work for orgs or users)
+Possibly something along the lines of `/dashboards/:id/access` (this will only work for orgs or users). This is a slight
+deviation from the way that the system currently behaves as there are currently two endpoints `/dashboards/:id/members` and
+`/dashboards/:id/owners`. This would be consolodated into a single endpoint that returns the ACL for the resource.
 
-### Other Notes
-// TODO(desa)
-
-When a resource is created, if an org is provided with that request, that org will be come the owner of that
-resource. If no org is provided, then the resource will be owned by the user issuing the request
+#### Roles
+If we would like to introduces roles or groups in the future this would be done by creating a new Subject Type. Access would happen
+if a manner similar to that of the transitive access  
 
 
 # Authorization Modalities
@@ -170,4 +165,3 @@ of the event.
 For cases (1) and (2), the subject, resource, and action should be apparent at the time of authorization.
 
 For case (3), the service must store the subject (type and id) and refer back to it at the time of authorization.
-
