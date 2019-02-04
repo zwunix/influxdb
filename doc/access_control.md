@@ -41,7 +41,7 @@ For example, consider the following table
 | Org 1       | User 1  | read       |
 
 In this example, the following statements are true
- * `Org 1` is granted `read,write` access to `Dashboard 1`
+* `Org 1` is granted `read,write` access to `Dashboard 1`
 * `User 1` is granted `read` access to `Org 1`.
 * `User 1` is granted `read` access to `Dashboard 1` (transitively through `Org 1`'s access grant).
 
@@ -52,9 +52,30 @@ It should be noted that this model is functionally equivalent to a minimal role 
 
 ## Performing an action against a class of resource
 
+Performing actions against a class of resource is and should be equivalent to performing actions against a specific resource.
+The difference being that the resource is descriptive of the class. It should be noted that we need only grant write/create permissions
+the resource class as the only action we need to express is `User 1` is authorized to create dashboards for `Org 1` (as access to all of an org
+dashboards can be acheived by trasitive access of the org).
+
+Consider the following example
+
 | Resource         | Subject | Actions    |
 |------------------|---------|------------|
-| Org 1 Dashboards | User 1  | read,write |
+| Org 1 Dashboards | User 1  | write      |
+| Dashboard 1      | Org  1  | read,write |
+| Org 1            | User 1  | write      |
+
+In this example, the following statements are true
+* `User 1` is granted `write` for `Org 1 Dashboards` (e.g. they can create dashboards)
+* `Org 1` is granded `read,write` for `Dashboard 1`
+* `User 1` is granted `write` for `Org 1`
+* `User 1` is granted transitive `write` for `Dashboard 1`
+
+#### Note
+As of this writing, I'm not extremely confident that this is the correct solution, but it is in the realm of possible correct solutions. I'm open to alternative
+Specifically the thing I'm unsure of is that I don't like that the `read` action does not really make sense for the `Org 1 Dashboards` resource. I'm sure there are
+other ways we could achieve authorizing actions against top level resources on behalf of an organization, but I struggle to see a way we could do this within this framework
+consistently. It may be the case that we will special case create actions against top level resources. I'd appreciate feedback here.
 
 ## Retrieving all resources subject is authorized to access
 
@@ -64,11 +85,11 @@ provided.
 
 For example consider the table below
 
-| SubjectType | SubjectID | ResourceType | ResourceID |
-|-------------|-----------|--------------|------------|
-| User        | 1         | Dashboard    | 1          |
-| User        | 1         | Dashboard    | 2          |
-| User        | 2         | Dashboard    | 2          |
+| Subject | Resource    |
+|---------|-------------|
+| User 1  | Dashboard 1 |
+| User 1  | Dashboard 2 |
+| User 2  | Dashboard 2 |
 
 In this example
 
