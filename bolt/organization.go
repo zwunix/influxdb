@@ -525,6 +525,8 @@ func (c *Client) FindResourceOrganizationID(ctx context.Context, rt influxdb.Res
 			return influxdb.InvalidID(), err
 		}
 		return r.OrganizationID, nil
+	case influxdb.TasksResourceType:
+		return c.FindTaskOrganizationID(ctx, id)
 	case influxdb.DashboardsResourceType:
 		r, err := c.FindDashboardByID(ctx, id)
 		if err != nil {

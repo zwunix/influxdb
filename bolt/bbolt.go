@@ -23,9 +23,10 @@ func getOp(op string) string {
 
 // Client is a client for the boltDB data store.
 type Client struct {
-	Path   string
-	db     *bolt.DB
-	Logger *zap.Logger
+	Path       string
+	db         *bolt.DB
+	Logger     *zap.Logger
+	taskBucket []byte
 
 	IDGenerator    platform.IDGenerator
 	TokenGenerator platform.TokenGenerator
@@ -107,6 +108,14 @@ func (c *Client) initialize(ctx context.Context) error {
 		if err := c.initializeDashboards(ctx, tx); err != nil {
 			return err
 		}
+
+		// Always create tasks bucket.
+		taskBucket, err := c.initializeTasks(ctx, tx)
+		if err != nil {
+			return err
+		}
+
+		c.taskBucket = taskBucket
 
 		// Always create User bucket.
 		if err := c.initializeUsers(ctx, tx); err != nil {
