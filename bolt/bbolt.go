@@ -11,7 +11,6 @@ import (
 	platform "github.com/influxdata/influxdb"
 	"github.com/influxdata/influxdb/rand"
 	"github.com/influxdata/influxdb/snowflake"
-	taskbolt "github.com/influxdata/influxdb/task/backend/bolt"
 	"go.uber.org/zap"
 )
 
@@ -24,10 +23,10 @@ func getOp(op string) string {
 
 // Client is a client for the boltDB data store.
 type Client struct {
-	Path      string
-	db        *bolt.DB
-	Logger    *zap.Logger
-	TaskStore *taskbolt.Store
+	Path        string
+	db          *bolt.DB
+	Logger      *zap.Logger
+	TaskService platform.TaskService
 
 	IDGenerator    platform.IDGenerator
 	TokenGenerator platform.TokenGenerator
