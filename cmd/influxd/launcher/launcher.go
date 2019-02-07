@@ -404,6 +404,8 @@ func (m *Launcher) run(ctx context.Context) (err error) {
 		taskSvc = task.NewValidator(taskSvc, bucketSvc)
 	}
 
+	m.boltClient.TaskStore = &taskSvc
+
 	// NATS streaming server
 	m.natsServer = nats.NewServer()
 	if err := m.natsServer.Open(); err != nil {

@@ -11,6 +11,7 @@ import (
 	platform "github.com/influxdata/influxdb"
 	"github.com/influxdata/influxdb/rand"
 	"github.com/influxdata/influxdb/snowflake"
+	taskbolt "github.com/influxdata/influxdb/task/backend/bolt"
 	"go.uber.org/zap"
 )
 
@@ -23,10 +24,10 @@ func getOp(op string) string {
 
 // Client is a client for the boltDB data store.
 type Client struct {
-	Path       string
-	db         *bolt.DB
-	Logger     *zap.Logger
-	taskBucket []byte
+	Path      string
+	db        *bolt.DB
+	Logger    *zap.Logger
+	TaskStore *taskbolt.Store
 
 	IDGenerator    platform.IDGenerator
 	TokenGenerator platform.TokenGenerator
@@ -108,14 +109,6 @@ func (c *Client) initialize(ctx context.Context) error {
 		if err := c.initializeDashboards(ctx, tx); err != nil {
 			return err
 		}
-
-		// Always create tasks bucket.
-		taskBucket, err := c.initializeTasks(ctx, tx)
-		if err != nil {
-			return err
-		}
-
-		c.taskBucket = taskBucket
 
 		// Always create User bucket.
 		if err := c.initializeUsers(ctx, tx); err != nil {
