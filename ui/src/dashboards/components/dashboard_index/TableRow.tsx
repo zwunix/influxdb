@@ -27,7 +27,6 @@ import {
   UPDATED_AT_TIME_FORMAT,
   DEFAULT_DASHBOARD_NAME,
 } from 'src/dashboards/constants'
-import EditableName from 'src/shared/components/EditableName'
 
 interface Props {
   dashboard: Dashboard
@@ -37,7 +36,6 @@ interface Props {
   onExportDashboard: (dashboard: Dashboard) => void
   onUpdateDashboard: (dashboard: Dashboard) => void
   onEditLabels: (dashboard: Dashboard) => void
-  showInlineEdit?: boolean
 }
 
 export default class DashboardsIndexTableRow extends PureComponent<Props> {
@@ -57,7 +55,9 @@ export default class DashboardsIndexTableRow extends PureComponent<Props> {
               stackChildren={Stack.Columns}
               align={Alignment.Left}
             >
-              {this.resourceNames}
+              <Link className={this.nameClassName} to={`/dashboards/${id}`}>
+                {this.name}
+              </Link>
               {this.labels}
             </ComponentSpacer>
             <EditableDescription
@@ -89,28 +89,6 @@ export default class DashboardsIndexTableRow extends PureComponent<Props> {
         </IndexList.Cell>
       </IndexList.Row>
     )
-  }
-
-  private get resourceNames(): JSX.Element {
-    const {showInlineEdit, dashboard} = this.props
-    if (showInlineEdit) {
-      return (
-        <EditableName
-          onUpdate={this.handleUpdateDashboard}
-          name={dashboard.name}
-          hrefValue={`/dashboards/${dashboard.id}`}
-        />
-      )
-    }
-    return (
-      <Link className={this.nameClassName} to={`/dashboards/${dashboard.id}`}>
-        {this.name}
-      </Link>
-    )
-  }
-
-  private handleUpdateDashboard = (name: string) => {
-    this.props.onUpdateDashboard({...this.props.dashboard, name})
   }
 
   private get labels(): JSX.Element {

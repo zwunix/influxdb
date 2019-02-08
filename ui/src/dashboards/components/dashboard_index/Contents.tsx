@@ -25,7 +25,6 @@ interface Props {
   onEditLabels: (dashboard: Dashboard) => void
   notify: (message: Notification) => void
   searchTerm: string
-  showInlineEdit?: boolean
 }
 
 @ErrorHandling
@@ -42,7 +41,6 @@ export default class DashboardsIndexContents extends Component<Props> {
       onEditLabels,
       searchTerm,
       orgs,
-      showInlineEdit,
     } = this.props
 
     return (
@@ -59,7 +57,6 @@ export default class DashboardsIndexContents extends Component<Props> {
           onUpdateDashboard={onUpdateDashboard}
           onEditLabels={onEditLabels}
           orgs={orgs}
-          showInlineEdit={showInlineEdit}
         />
       </div>
     )

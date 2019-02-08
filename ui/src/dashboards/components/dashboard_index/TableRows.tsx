@@ -15,7 +15,6 @@ interface Props {
   onUpdateDashboard: (dashboard: Dashboard) => void
   onEditLabels: (dashboard: Dashboard) => void
   orgs: Organization[]
-  showInlineEdit?: boolean
 }
 
 export default class DashboardsIndexTableRows extends PureComponent<Props> {
@@ -28,7 +27,6 @@ export default class DashboardsIndexTableRows extends PureComponent<Props> {
       onUpdateDashboard,
       onEditLabels,
       orgs,
-      showInlineEdit,
     } = this.props
 
     return dashboards.map(d => (
@@ -41,7 +39,6 @@ export default class DashboardsIndexTableRows extends PureComponent<Props> {
         onUpdateDashboard={onUpdateDashboard}
         onEditLabels={onEditLabels}
         orgs={orgs}
-        showInlineEdit={showInlineEdit}
       />
     ))
   }
