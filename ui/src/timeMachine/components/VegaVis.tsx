@@ -18,27 +18,37 @@ interface Dataz {
   values: DataValues[]
 }
 
-const specTemplate = {
-  $schema: 'https://vega.github.io/schema/vega-lite/v2.0.json',
-  description: 'This chart was made with vega embed!',
-  mark: 'point',
-  encoding: {
-    x: {
-      field: 'time',
-      type: 'temporal',
-      axis: {title: 'chronological stuff'},
-    },
-    y: {
-      field: 'value',
-      type: 'quantitative',
-      axis: {title: 'numerical stuff'},
-    },
-  },
-}
+const specTemplate = {}
+//   $schema: 'https://vega.github.io/schema/vega-lite/v3.0.json',
+//   description: 'This chart was made with vega embed!',
+//   mark: {
+//     type: 'line',
+//     point: {
+//       filled: true,
+//       fill: 'red',
+//     },
+//   },
+//   encoding: {
+//     x: {
+//       field: 'time',
+//       type: 'temporal',
+//       axis: {
+//         title: 'chronological stuff',
+//         titleColor: '#fff',
+//         titleFontSize: 14,
+//       },
+//     },
+//     y: {
+//       field: 'value',
+//       type: 'quantitative',
+//       axis: {title: 'numerical stuff', titleColor: '#fff', titleFontSize: 14},
+//     },
+//   },
+// }
 
 const opt = {
-  // width: 100,
-  // height: 100,
+  width: 500,
+  height: 500,
   renderer: 'svg',
 }
 
@@ -50,11 +60,11 @@ export default class VegaVis extends Component<Props> {
   }
 
   public render() {
-    console.log('rendering VegaVis')
-    console.log(this.props.tables)
+    // console.log('rendering VegaVis')
+    // console.log(this.props.tables)
     const {vegaObj} = this.props
     const spec = {...specTemplate, ...vegaObj, data: this.dataMaker()}
-    console.log('spec', spec)
+    // console.log('spec', spec)
     vegaEmbed('#vis', spec, opt).then(res =>
       res.view.insert('awesomeData', this.dataMaker()).run()
     )
@@ -69,17 +79,22 @@ export default class VegaVis extends Component<Props> {
       const timeIndex = _.indexOf(header, '_time')
       const valIndex = _.indexOf(header, '_value')
 
-      const formatted = data.map(d => ({
+      const values = data.map(d => ({
         time: d[timeIndex],
         value: d[valIndex],
+        thing: 1,
       }))
 
       const theData = {
         name: 'awesomeData',
-        values: formatted,
+        values,
       }
       return theData
     }
-    return null
+    const theData = {
+      name: 'awesomeData',
+      values: [],
+    }
+    return theData
   }
 }

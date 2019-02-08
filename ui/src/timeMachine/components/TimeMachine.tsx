@@ -3,6 +3,7 @@ import React, {Component} from 'react'
 import {connect} from 'react-redux'
 import {get} from 'lodash'
 import classnames from 'classnames'
+import _ from 'lodash'
 
 // Components
 import {DraggableResizer, Stack} from 'src/clockface'
@@ -60,7 +61,7 @@ class TimeMachine extends Component<Props, State> {
   public render() {
     const {queries, submitToken, timeRange, vegaObj} = this.props
     const {resizerHandlePosition} = this.state
-    console.log('rendering... Time Machine')
+    const showVega = !_.isEmpty(vegaObj)
 
     return (
       <>
@@ -80,7 +81,9 @@ class TimeMachine extends Component<Props, State> {
                 <DraggableResizer.Panel>
                   <div className="time-machine--top">
                     {/* <TimeMachineVis queriesState={queriesState} /> */}
-                    <VegaVis tables={queriesState.tables} vegaObj={vegaObj} />
+                    {showVega && (
+                      <VegaVis tables={queriesState.tables} vegaObj={vegaObj} />
+                    )}
                   </div>
                 </DraggableResizer.Panel>
                 <DraggableResizer.Panel>

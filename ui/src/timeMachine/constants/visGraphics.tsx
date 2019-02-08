@@ -351,7 +351,7 @@ const GRAPHIC_SVGS = {
 export const VIS_GRAPHICS = [
   {
     type: ViewType.XY,
-    name: 'Graph',
+    name: 'VEGA Graph',
     graphic: GRAPHIC_SVGS[ViewType.XY],
   },
   {
