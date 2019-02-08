@@ -20,7 +20,7 @@ interface State {
   searchTerm: string
 }
 
-export default class Members extends PureComponent<Props, State> {
+export default class MembersTab extends PureComponent<Props, State> {
   constructor(props) {
     super(props)
     this.state = {

@@ -21,6 +21,7 @@ import Setup from 'src/Setup'
 import Signin from 'src/Signin'
 import SigninPage from 'src/onboarding/containers/SigninPage'
 import Logout from 'src/Logout'
+import MembersPage from 'src/organizations/components/MembersPage'
 import TaskPage from 'src/tasks/containers/TaskPage'
 import TasksPage from 'src/tasks/containers/TasksPage'
 import OrganizationsIndex from 'src/organizations/containers/OrganizationsIndex'
@@ -104,6 +105,11 @@ class Root extends PureComponent {
                             <Route path="organizations">
                               <IndexRoute component={OrganizationsIndex} />
                               <Route path=":orgID">
+                                <Route
+                                  path="members_tab"
+                                  component={MembersPage}
+                                />
+
                                 <Route
                                   path="tasks_tab/new"
                                   component={OrgTaskPage}

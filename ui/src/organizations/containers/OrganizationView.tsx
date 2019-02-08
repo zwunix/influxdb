@@ -29,18 +29,15 @@ import {Page} from 'src/pageLayout'
 import {SpinnerContainer, TechnoSpinner} from 'src/clockface'
 import TabbedPage from 'src/shared/components/tabbed_page/TabbedPage'
 import TabbedPageSection from 'src/shared/components/tabbed_page/TabbedPageSection'
-import Members from 'src/organizations/components/Members'
 import Buckets from 'src/organizations/components/Buckets'
 import OrgTasksPage from 'src/organizations/components/OrgTasksPage'
 import Collectors from 'src/organizations/components/Collectors'
 import Scrapers from 'src/organizations/components/Scrapers'
 import GetOrgResources from 'src/organizations/components/GetOrgResources'
-import RenamablePageTitle from 'src/pageLayout/components/RenamablePageTitle'
 
 // Types
 import {AppState, Dashboard} from 'src/types/v2'
 import {
-  ResourceOwner,
   Bucket,
   Organization,
   Telegraf,
@@ -52,6 +49,7 @@ import * as NotificationsActions from 'src/types/actions/notifications'
 import {ErrorHandling} from 'src/shared/decorators/errors'
 import {Task} from 'src/tasks/containers/TasksPage'
 import OrgDashboardIndex from '../components/OrgDashboardIndex'
+import {OrgHeader} from 'src/organizations/components/OrgHeader'
 
 interface StateProps {
   org: Organization
@@ -82,17 +80,7 @@ class OrganizationView extends PureComponent<Props> {
 
     return (
       <Page titleTag={org.name}>
-        <Page.Header fullWidth={false}>
-          <Page.Header.Left>
-            <RenamablePageTitle
-              name={org.name}
-              maxLength={70}
-              placeholder="Name this Organization"
-              onRename={this.handleUpdateOrg}
-            />
-          </Page.Header.Left>
-          <Page.Header.Right />
-        </Page.Header>
+        <OrgHeader orgName={org.name} onUpdateOrg={this.handleUpdateOrg} />
         <Page.Contents fullWidth={false} scrollable={true}>
           <div className="col-xs-12">
             <TabbedPage
@@ -100,25 +88,6 @@ class OrganizationView extends PureComponent<Props> {
               parentUrl={`/organizations/${org.id}`}
               activeTabUrl={params.tab}
             >
-              <TabbedPageSection
-                id="org-view-tab--members"
-                url="members_tab"
-                title="Members"
-              >
-                <GetOrgResources<ResourceOwner[]>
-                  organization={org}
-                  fetcher={this.getOwnersAndMembers}
-                >
-                  {(members, loading) => (
-                    <SpinnerContainer
-                      loading={loading}
-                      spinnerComponent={<TechnoSpinner />}
-                    >
-                      <Members members={members} orgName={org.name} />
-                    </SpinnerContainer>
-                  )}
-                </GetOrgResources>
-              </TabbedPageSection>
               <TabbedPageSection
                 id="org-view-tab--buckets"
                 url="buckets_tab"
