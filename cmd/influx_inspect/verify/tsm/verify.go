@@ -159,11 +159,11 @@ func (v *verifyChecksums) Run(w io.Writer, dataPath string) error {
 			if err != nil {
 				v.totalErrors++
 				fileErrors++
-				fmt.Fprintf(w, "%s: could not get checksum for key %v block %d due to error: %q\n", f, key, count, err)
+				fmt.Fprintf(w, "%s: could not get checksum for key %q block %d due to error: %q\n", f, key, count, err)
 			} else if expected := crc32.ChecksumIEEE(buf); checksum != expected {
 				v.totalErrors++
 				fileErrors++
-				fmt.Fprintf(w, "%s: got %d but expected %d for key %v, block %d\n", f, checksum, expected, key, count)
+				fmt.Fprintf(w, "%s: got checksum %d but expected %d for key %q, block %d\n", f, checksum, expected, key, count)
 			}
 			count++
 		}
