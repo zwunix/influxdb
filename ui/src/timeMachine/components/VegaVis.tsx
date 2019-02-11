@@ -23,10 +23,10 @@ const specTemplate = {}
 //   description: 'This chart was made with vega embed!',
 //   mark: {
 //     type: 'line',
-//     point: {
-//       filled: true,
-//       fill: 'red',
-//     },
+//     // point: {
+//     //   filled: true,
+//     //   fill: 'red',
+//     // },
 //   },
 //   encoding: {
 //     x: {
@@ -48,7 +48,7 @@ const specTemplate = {}
 
 const opt = {
   width: 500,
-  height: 500,
+  height: 400,
   renderer: 'svg',
 }
 

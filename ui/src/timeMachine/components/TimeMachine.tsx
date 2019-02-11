@@ -81,9 +81,9 @@ class TimeMachine extends Component<Props, State> {
                 <DraggableResizer.Panel>
                   <div className="time-machine--top">
                     {/* <TimeMachineVis queriesState={queriesState} /> */}
-                    {showVega && (
-                      <VegaVis tables={queriesState.tables} vegaObj={vegaObj} />
-                    )}
+                    {/* {showVega && ( */}
+                    <VegaVis tables={queriesState.tables} vegaObj={vegaObj} />
+                    {/* )} */}
                   </div>
                 </DraggableResizer.Panel>
                 <DraggableResizer.Panel>
