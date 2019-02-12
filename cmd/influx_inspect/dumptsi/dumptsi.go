@@ -418,6 +418,7 @@ func (cmd *Command) printIndexFileSummary(f *tsi1.IndexFile) error {
 	var keyN uint64
 	var valueN, valueSeriesN, valueSeriesSize uint64
 
+	seriesIDStorageType := "varint"
 	if mitr := f.MeasurementIterator(); mitr != nil {
 		for me, _ := mitr.Next().(*tsi1.MeasurementBlockElem); me != nil; me, _ = mitr.Next().(*tsi1.MeasurementBlockElem) {
 			kitr := f.TagKeyIterator(me.Name())
@@ -433,11 +434,16 @@ func (cmd *Command) printIndexFileSummary(f *tsi1.IndexFile) error {
 			measurementN++
 			measurementSeriesN += uint64(me.SeriesN())
 			measurementSeriesSize += uint64(len(me.SeriesData()))
+
+			if me.HasSeriesIDSet() {
+				seriesIDStorageType = "bitmap"
+			}
 		}
 	}
 
 	// Write stats.
 	tw := tabwriter.NewWriter(cmd.Stdout, 8, 8, 1, '\t', 0)
+	fmt.Fprintf(tw, "Series ID Storage:\t%s\n", seriesIDStorageType)
 	fmt.Fprintf(tw, "Measurements:\t%d\n", measurementN)
 	fmt.Fprintf(tw, "  Series data size:\t%d (%s)\n", measurementSeriesSize, formatSize(measurementSeriesSize))
 	fmt.Fprintf(tw, "  Bytes per series:\t%.01fb\n", float64(measurementSeriesSize)/float64(measurementSeriesN))

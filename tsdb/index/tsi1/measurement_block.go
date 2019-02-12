@@ -381,6 +381,10 @@ func (e *MeasurementBlockElem) SeriesID(i int) uint64 {
 
 func (e *MeasurementBlockElem) HasSeries() bool { return e.series.n > 0 }
 
+func (e *MeasurementBlockElem) HasSeriesIDSet() bool {
+	return (e.flag & MeasurementSeriesIDSetFlag) != 0
+}
+
 // SeriesIDs returns a list of decoded series ids.
 //
 // NOTE: This should be used for testing and diagnostics purposes only.
