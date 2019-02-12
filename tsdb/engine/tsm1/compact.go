@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -844,7 +845,7 @@ func (c *Compactor) WriteSnapshot(cache *Cache) ([]string, error) {
 	for i := 0; i < concurrency; i++ {
 		go func(sp *Cache) {
 			iter := NewCacheKeyIterator(sp, tsdb.DefaultMaxPointsPerBlock, intC)
-			files, err := c.writeNewFiles(c.FileStore.NextGeneration(), 0, nil, iter, throttle)
+			files, err := c.writeNewFiles(c.FileStore.NextGeneration(), nil, iter, throttle)
 			resC <- res{files: files, err: err}
 
 		}(splits[i])
@@ -888,23 +889,14 @@ func (c *Compactor) compact(fast bool, tsmFiles []string) ([]string, error) {
 	intC := c.compactionsInterrupt
 	c.mu.RUnlock()
 
-	// The new compacted files need to added to the max generation in the
-	// set.  We need to find that max generation as well as the max sequence
-	// number to ensure we write to the next unique location.
-	var maxGeneration, maxSequence int
+	// The new compacted files need to added to the max generation in the set.
+	var maxGeneration int
 	for _, f := range tsmFiles {
-		gen, seq, err := c.parseFileName(f)
+		gen, _, err := c.parseFileName(f)
 		if err != nil {
 			return nil, err
-		}
-
-		if gen > maxGeneration {
+		} else if gen > maxGeneration {
 			maxGeneration = gen
-			maxSequence = seq
-		}
-
-		if gen == maxGeneration && seq > maxSequence {
-			maxSequence = seq
 		}
 	}
 
@@ -937,7 +929,7 @@ func (c *Compactor) compact(fast bool, tsmFiles []string) ([]string, error) {
 		return nil, err
 	}
 
-	return c.writeNewFiles(maxGeneration, maxSequence, tsmFiles, tsm, true)
+	return c.writeNewFiles(maxGeneration, tsmFiles, tsm, true)
 }
 
 // CompactFull writes multiple smaller TSM files into 1 or more larger files.
@@ -1018,18 +1010,33 @@ func (c *Compactor) removeTmpFiles(files []string) error {
 
 // writeNewFiles writes from the iterator into new TSM files, rotating
 // to a new file once it has reached the max TSM file size.
-func (c *Compactor) writeNewFiles(generation, sequence int, src []string, iter KeyIterator, throttle bool) ([]string, error) {
+func (c *Compactor) writeNewFiles(generation int, src []string, iter KeyIterator, throttle bool) ([]string, error) {
 	// These are the new TSM files written
 	var files []string
 
 	for {
+		fis, err := ioutil.ReadDir(c.Dir)
+		if err != nil {
+			return nil, err
+		}
+
+		// Find the max sequence of the generation.
+		var sequence int
+		for _, fi := range fis {
+			gen, seq, err := c.parseFileName(filepath.Base(fi.Name()))
+			if err != nil {
+				continue
+			} else if gen == generation && seq > sequence {
+				sequence = seq
+			}
+		}
 		sequence++
 
 		// New TSM files are written to a temp file and renamed when fully completed.
 		fileName := filepath.Join(c.Dir, c.formatFileName(generation, sequence)+"."+TSMFileExtension+"."+TmpTSMFileExtension)
 
 		// Write as much as possible to this file
-		err := c.write(fileName, iter, throttle)
+		err = c.write(fileName, iter, throttle)
 
 		// We've hit the max file limit and there is more to write.  Create a new file
 		// and continue.
