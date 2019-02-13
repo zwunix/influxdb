@@ -3,7 +3,7 @@ TARGETS =
 # List any source files used to generate the targets here
 SOURCES =
 # List any directories that have their own Makefile here
-SUBDIRS = dist server canned
+SUBDIRS = dist server
 
 # Default target
 all: $(SUBDIRS) $(TARGETS)

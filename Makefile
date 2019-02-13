@@ -37,9 +37,6 @@ SOURCES_NO_VENDOR := $(shell find . -path ./vendor -prune -o -name "*.go" -not -
 # All assets for chronograf
 UISOURCES := $(shell find ui -type f -not \( -path ui/build/\* -o -path ui/node_modules/\* -o -path ui/.cache/\* -o -name Makefile -prune \) )
 
-# All precanned dashboards
-PRECANNED := $(shell find chronograf/canned -name '*.json')
-
 # List of binary cmds to build
 CMDS := \
 	bin/$(GOOS)/influx \
