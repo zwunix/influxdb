@@ -30,6 +30,8 @@ export const INITIAL_PLOT_ENV: PlotEnv = {
   yTicks: [],
   xDomain: [],
   yDomain: [],
+  controlledXDomain: null,
+  controlledYDomain: null,
   hoverX: null,
   hoverY: null,
   margins: {
@@ -45,13 +47,14 @@ export const plotEnvReducer = (state: PlotEnv, action: PlotAction): PlotEnv =>
   produce(state, draftState => {
     switch (action.type) {
       case 'REGISTER_LAYER': {
-        const {layerKey, table, aesthetics, colors} = action.payload
+        const {layerKey, layer} = action.payload
 
-        draftState.layers[layerKey] = {table, aesthetics, colors, scales: {}}
+        draftState.layers[layerKey] = layer
 
-        computeXYDomain(draftState)
-        computeXYLayout(draftState)
-        computeFillScales(draftState)
+        setXDomain(draftState)
+        setYDomain(draftState)
+        setLayout(draftState)
+        setFillScales(draftState)
 
         return
       }
@@ -61,9 +64,10 @@ export const plotEnvReducer = (state: PlotEnv, action: PlotAction): PlotEnv =>
 
         delete draftState.layers[layerKey]
 
-        computeXYDomain(draftState)
-        computeXYLayout(draftState)
-        computeFillScales(draftState)
+        setXDomain(draftState)
+        setYDomain(draftState)
+        setLayout(draftState)
+        setFillScales(draftState)
 
         return
       }
@@ -74,7 +78,7 @@ export const plotEnvReducer = (state: PlotEnv, action: PlotAction): PlotEnv =>
         draftState.width = width
         draftState.height = height
 
-        computeXYLayout(draftState)
+        setLayout(draftState)
 
         return
       }
@@ -85,31 +89,46 @@ export const plotEnvReducer = (state: PlotEnv, action: PlotAction): PlotEnv =>
         return
       }
 
-      case 'SET_COLORS': {
-        const {colors, layerKey} = action.payload
+      case 'SET_CONTROLLED_X_DOMAIN': {
+        const {xDomain} = action.payload
 
-        if (layerKey) {
-          draftState.layers[layerKey].colors = colors
-        } else {
-          draftState.defaults.colors = colors
-        }
+        draftState.controlledXDomain = xDomain
 
-        computeFillScales(draftState)
+        setXDomain(draftState)
+        setLayout(draftState)
+
+        return
+      }
+
+      case 'SET_CONTROLLED_Y_DOMAIN': {
+        const {yDomain} = action.payload
+
+        draftState.controlledYDomain = yDomain
+
+        setYDomain(draftState)
+        setLayout(draftState)
 
         return
       }
     }
   })
 
-const getCols = (state: PlotEnv, aestheticNames: string[]): any[][] => {
+/*
+  Find all columns in the current in all layers that are mapped to the supplied
+  aesthetics
+*/
+const getColumnsForAesthetics = (
+  state: PlotEnv,
+  aesthetics: string[]
+): any[][] => {
   const {defaults, layers} = state
 
   const cols = []
 
-  for (const layer of [defaults, ...Object.values(layers)]) {
-    for (const aestheticName of aestheticNames) {
-      if (layer.aesthetics[aestheticName]) {
-        const colName = layer.aesthetics[aestheticName]
+  for (const layer of Object.values(layers)) {
+    for (const aes of aesthetics) {
+      if (layer.aesthetics[aes]) {
+        const colName = layer.aesthetics[aes]
         const col = layer.table
           ? layer.table.columns[colName]
           : defaults.table.columns[colName]
@@ -122,17 +141,57 @@ const getCols = (state: PlotEnv, aestheticNames: string[]): any[][] => {
   return cols
 }
 
+/*
+  Flatten an array of arrays by one level
+*/
 const flatten = (arrays: any[][]): any[] => [].concat(...arrays)
 
-// TODO: Memoize computation by comparing to previous state
-const computeXYDomain = (draftState: PlotEnv): void => {
-  draftState.xDomain = extent(
-    flatten(getCols(draftState, ['x', 'xMin', 'xMax']).map(col => extent(col)))
+/*
+  Given a list of aesthetics, find the domain across all columns in all layers
+  that are mapped to that aesthetic
+*/
+const getDomainForAesthetics = (
+  state: PlotEnv,
+  aesthetics: string[]
+): any[] => {
+  const domains = getColumnsForAesthetics(state, aesthetics).map(col =>
+    extent(col)
   )
+  const domainOfDomains = extent(flatten(domains))
 
-  draftState.yDomain = extent(
-    flatten(getCols(draftState, ['y', 'yMin', 'yMax']).map(col => extent(col)))
-  )
+  return domainOfDomains
+}
+
+/*
+  If the x is in "controlled" mode, set it according to the passed x and y
+  domain props. Otherwise compute and set the domain based on the extent of
+  relevant data in each layer.
+*/
+const setXDomain = (draftState: PlotEnv): void => {
+  if (draftState.controlledXDomain) {
+    draftState.xDomain = draftState.controlledXDomain
+  } else {
+    draftState.xDomain = getDomainForAesthetics(draftState, [
+      'x',
+      'xMin',
+      'xMax',
+    ])
+  }
+}
+
+/*
+  See `setXDomain`.
+*/
+const setYDomain = (draftState: PlotEnv): void => {
+  if (draftState.controlledYDomain) {
+    draftState.yDomain = draftState.controlledYDomain
+  } else {
+    draftState.yDomain = getDomainForAesthetics(draftState, [
+      'y',
+      'yMin',
+      'yMax',
+    ])
+  }
 }
 
 const getTicks = ([d0, d1]: number[], length: number): string[] => {
@@ -146,7 +205,10 @@ const getTicks = ([d0, d1]: number[], length: number): string[] => {
   return result
 }
 
-const computeXYLayout = (draftState: PlotEnv): void => {
+/*
+  Compute and set the ticks, margins, x/y scales, and dimensions for the plot.
+*/
+const setLayout = (draftState: PlotEnv): void => {
   const {width, height, xDomain, yDomain} = draftState
 
   draftState.xTicks = getTicks(xDomain, width)
@@ -178,6 +240,10 @@ const computeXYLayout = (draftState: PlotEnv): void => {
     .range([innerHeight, 0])
 }
 
+/*
+  Get a scale that maps elements of the domain to a color according to the
+  color scheme passed as `colors`.
+*/
 const getColorScale = (domain: any[], colors: string[]) => {
   const range = chroma
     .scale(colors)
@@ -191,6 +257,13 @@ const getColorScale = (domain: any[], colors: string[]) => {
   return scale
 }
 
+/*
+  Get the domain for the scale used for the data-to-fill aesthetic mapping.
+
+  The fill aesthetic is always used to visually distinguish different groupings
+  of data (for now). So the domain of the scale is a set of "group keys" which
+  represent all possible groupings of data in the layer.
+*/
 const getFillDomain = ({table, aesthetics}: Layer): string[] => {
   const fillColKeys = aesthetics.fill
 
@@ -208,14 +281,27 @@ const getFillDomain = ({table, aesthetics}: Layer): string[] => {
   return [...fillDomain].sort()
 }
 
-const computeFillScales = (draftState: PlotEnv) => {
+/*
+  For each layer, compute and set a fill scale according to the layer's
+  data-to-fill mapping.
+*/
+const setFillScales = (draftState: PlotEnv) => {
   const layers = Object.values(draftState.layers)
 
   layers
     .filter(
+      // Pick out the layers that actually need a fill scale
       layer => layer.aesthetics.fill && layer.colors && layer.colors.length
     )
     .forEach(layer => {
       layer.scales.fill = getColorScale(getFillDomain(layer), layer.colors)
     })
 }
+
+export const resetEnv = (state: PlotEnv): PlotEnv =>
+  produce(state, draftState => {
+    setXDomain(draftState)
+    setYDomain(draftState)
+    setLayout(draftState)
+    setFillScales(draftState)
+  })

@@ -9,19 +9,6 @@ export const TICK_PADDING_TOP = 5
 export const TICK_CHAR_WIDTH = 7
 export const TICK_CHAR_HEIGHT = 10
 
-export const CATEGORY_10 = [
-  '#1f77b4',
-  '#ff7f0e',
-  '#2ca02c',
-  '#d62728',
-  '#9467bd',
-  '#8c564b',
-  '#e377c2',
-  '#7f7f7f',
-  '#bcbd22',
-  '#17becf',
-]
-
 export {Plot} from 'src/minard/components/Plot'
 
 export {
@@ -71,6 +58,8 @@ export interface PlotEnv {
   layers: {[layerKey: string]: Layer}
   xDomain: number[]
   yDomain: number[]
+  controlledXDomain: number[]
+  controlledYDomain: number[]
   xTicks: string[]
   yTicks: string[]
   margins: Margins

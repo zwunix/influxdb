@@ -1,12 +1,11 @@
-import React, {useState, useEffect, SFC} from 'react'
-import uuid from 'uuid'
+import React, {SFC} from 'react'
 
 import {PlotEnv} from 'src/minard'
 import {bin} from 'src/minard/utils/bin'
-import {registerLayer, unregisterLayer} from 'src/minard/utils/plotEnvActions'
 import HistogramBars from 'src/minard/components/HistogramBars'
 import HistogramTooltip from 'src/minard/components/HistogramTooltip'
 import {findHoveredRowIndices} from 'src/minard/utils/findHoveredRowIndices'
+import {useLayer} from 'src/minard/utils/useLayer'
 
 export enum Position {
   Stacked = 'stacked',
@@ -15,11 +14,11 @@ export enum Position {
 
 export interface Props {
   env: PlotEnv
-  x?: string
-  fill?: string[]
+  x: string
+  fill: string[]
+  colors: string[]
   position?: Position
   binCount?: number
-  colors?: string[]
   tooltip?: (props: TooltipProps) => JSX.Element
 }
 
@@ -33,26 +32,25 @@ export interface TooltipProps {
   }>
 }
 
-export const Histogram: SFC<Props> = props => {
-  const [layerKey] = useState(() => uuid.v4())
+export const Histogram: SFC<Props> = ({
+  env,
+  x,
+  fill,
+  colors,
+  tooltip = null,
+  binCount = null,
+  position = Position.Stacked,
+}: Props) => {
+  const defaultTable = env.defaults.table
 
-  const {binCount, position} = props
-  const {layers, defaults, dispatch} = props.env
-  const layer = layers[layerKey]
-  const table = defaults.table
-  const x = props.x || defaults.aesthetics.x
-  const fill = props.fill || defaults.aesthetics.fill
-  const colors = props.colors
-
-  useEffect(
+  const layer = useLayer(
+    env,
     () => {
-      const [statTable, mappings] = bin(table, x, fill, binCount, position)
+      const [table, aesthetics] = bin(defaultTable, x, fill, binCount, position)
 
-      dispatch(registerLayer(layerKey, statTable, mappings, colors))
-
-      return () => dispatch(unregisterLayer(layerKey))
+      return {table, aesthetics, colors, scales: {}}
     },
-    [table, x, fill, position, binCount, colors]
+    [defaultTable, x, fill, position, binCount, colors]
   )
 
   if (!layer) {
@@ -67,17 +65,19 @@ export const Histogram: SFC<Props> = props => {
     defaults: {
       scales: {x: xScale, y: yScale},
     },
-  } = props.env
+  } = env
 
-  const {aesthetics, table: statTable} = layer
+  const {aesthetics, table} = layer
 
   let hoveredRowIndices = null
 
+  console.log(hoverX, xScale.invert(hoverX))
+
   if (hoverX && hoverY) {
     hoveredRowIndices = findHoveredRowIndices(
-      statTable.columns[aesthetics.xMin],
-      statTable.columns[aesthetics.xMax],
-      statTable.columns[aesthetics.yMax],
+      table.columns[aesthetics.xMin],
+      table.columns[aesthetics.xMax],
+      table.columns[aesthetics.yMax],
       xScale.invert(hoverX),
       yScale.invert(hoverY)
     )
@@ -91,7 +91,7 @@ export const Histogram: SFC<Props> = props => {
         layer={layer}
         xScale={xScale}
         yScale={yScale}
-        position={props.position || Position.Stacked}
+        position={position}
         hoveredRowIndices={hoveredRowIndices}
       />
       {hoveredRowIndices && (
@@ -100,7 +100,7 @@ export const Histogram: SFC<Props> = props => {
           hoverY={hoverY}
           hoveredRowIndices={hoveredRowIndices}
           layer={layer}
-          tooltip={props.tooltip}
+          tooltip={tooltip}
         />
       )}
     </>

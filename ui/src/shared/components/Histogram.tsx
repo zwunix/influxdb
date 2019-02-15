@@ -17,6 +17,7 @@ import {tableLoaded} from 'src/timeMachine/actions'
 
 // Utils
 import {toMinardTable} from 'src/shared/utils/toMinardTable'
+import {useOneWayState} from 'src/shared/utils/useOneWayState'
 
 // Constants
 import {INVALID_DATA_COPY} from 'src/shared/copy/cell'
@@ -38,7 +39,14 @@ type Props = OwnProps & DispatchProps
 
 const Histogram: SFC<Props> = props => {
   const {tables, onTableLoaded} = props
-  const {xColumn, fillColumns, binCount, position, colors} = props.properties
+  const {
+    xColumn,
+    fillColumns,
+    binCount,
+    position,
+    colors,
+    xDomain: defaultXDomain,
+  } = props.properties
   const colorHexes = colors.map(c => c.hex)
 
   const toMinardTableResult = useMemo(() => toMinardTable(tables), [tables])
@@ -76,6 +84,8 @@ const Histogram: SFC<Props> = props => {
     fill = []
   }
 
+  const [xDomain, setXDomain] = useOneWayState(defaultXDomain)
+
   if (!x) {
     return <EmptyGraphMessage message={INVALID_DATA_COPY} />
   }
@@ -83,7 +93,13 @@ const Histogram: SFC<Props> = props => {
   return (
     <AutoSizer>
       {({width, height}) => (
-        <MinardPlot table={table} width={width} height={height}>
+        <MinardPlot
+          table={table}
+          width={width}
+          height={height}
+          xDomain={xDomain}
+          onSetXDomain={setXDomain}
+        >
           {env => (
             <MinardHistogram
               env={env}
