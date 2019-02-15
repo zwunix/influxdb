@@ -6,11 +6,19 @@ import HistogramBars from 'src/minard/components/HistogramBars'
 import HistogramTooltip from 'src/minard/components/HistogramTooltip'
 import {findHoveredRowIndices} from 'src/minard/utils/findHoveredRowIndices'
 import {useLayer} from 'src/minard/utils/useLayer'
+import {useDomain} from 'src/minard/utils/useDomain'
 
 export enum Position {
   Stacked = 'stacked',
   Overlaid = 'overlaid',
 }
+
+// first render, no controlled domains
+// render plot with skeleton data
+// renders child
+// child registers stat table with auto computed domain
+// parent/env reacts and sets xDomain and yDomain, layout
+// child rerenders but was unnecessary :(
 
 export interface Props {
   env: PlotEnv
@@ -42,11 +50,19 @@ export const Histogram: SFC<Props> = ({
   position = Position.Stacked,
 }: Props) => {
   const defaultTable = env.defaults.table
+  const xDomain = useDomain(env.xDomain, defaultTable.columns[x])
 
   const layer = useLayer(
     env,
     () => {
-      const [table, aesthetics] = bin(defaultTable, x, fill, binCount, position)
+      const [table, aesthetics] = bin(
+        defaultTable,
+        x,
+        xDomain,
+        fill,
+        binCount,
+        position
+      )
 
       return {table, aesthetics, colors, scales: {}}
     },
@@ -69,19 +85,15 @@ export const Histogram: SFC<Props> = ({
 
   const {aesthetics, table} = layer
 
-  let hoveredRowIndices = null
-
-  console.log(hoverX, xScale.invert(hoverX))
-
-  if (hoverX && hoverY) {
-    hoveredRowIndices = findHoveredRowIndices(
-      table.columns[aesthetics.xMin],
-      table.columns[aesthetics.xMax],
-      table.columns[aesthetics.yMax],
-      xScale.invert(hoverX),
-      yScale.invert(hoverY)
-    )
-  }
+  const hoveredRowIndices = findHoveredRowIndices(
+    table.columns[aesthetics.xMin],
+    table.columns[aesthetics.xMax],
+    table.columns[aesthetics.yMax],
+    hoverX,
+    hoverY,
+    xScale,
+    yScale
+  )
 
   return (
     <>

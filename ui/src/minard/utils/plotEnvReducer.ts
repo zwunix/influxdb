@@ -28,8 +28,8 @@ export const INITIAL_PLOT_ENV: PlotEnv = {
   layers: {},
   xTicks: [],
   yTicks: [],
-  xDomain: [],
-  yDomain: [],
+  xDomain: null,
+  yDomain: null,
   controlledXDomain: null,
   controlledYDomain: null,
   hoverX: null,
@@ -153,11 +153,16 @@ const flatten = (arrays: any[][]): any[] => [].concat(...arrays)
 const getDomainForAesthetics = (
   state: PlotEnv,
   aesthetics: string[]
-): any[] => {
+): [number, number] => {
   const domains = getColumnsForAesthetics(state, aesthetics).map(col =>
     extent(col)
   )
+
   const domainOfDomains = extent(flatten(domains))
+
+  if (domainOfDomains.some(x => x === undefined)) {
+    return null
+  }
 
   return domainOfDomains
 }
@@ -211,6 +216,12 @@ const getTicks = ([d0, d1]: number[], length: number): string[] => {
 const setLayout = (draftState: PlotEnv): void => {
   const {width, height, xDomain, yDomain} = draftState
 
+  if (!xDomain || !yDomain) {
+    setSkeletonLayout(draftState)
+
+    return
+  }
+
   draftState.xTicks = getTicks(xDomain, width)
   draftState.yTicks = getTicks(yDomain, height)
 
@@ -238,6 +249,23 @@ const setLayout = (draftState: PlotEnv): void => {
   draftState.defaults.scales.y = scaleLinear()
     .domain(yDomain)
     .range([innerHeight, 0])
+}
+
+/*
+  If the plot doesn't have all the data needed to create a layout, set a dummy
+  layout instead.
+*/
+const setSkeletonLayout = (draftState: PlotEnv): void => {
+  draftState.xTicks = []
+  draftState.yTicks = []
+  draftState.innerWidth = draftState.width - PLOT_PADDING * 2
+  draftState.innerHeight = draftState.height - PLOT_PADDING * 2
+  draftState.margins = {
+    top: PLOT_PADDING,
+    right: PLOT_PADDING,
+    bottom: PLOT_PADDING,
+    left: PLOT_PADDING,
+  }
 }
 
 /*

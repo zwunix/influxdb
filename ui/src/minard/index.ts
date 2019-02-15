@@ -56,10 +56,10 @@ export interface PlotEnv {
   innerHeight: number
   defaults: Layer
   layers: {[layerKey: string]: Layer}
-  xDomain: number[]
-  yDomain: number[]
-  controlledXDomain: number[]
-  controlledYDomain: number[]
+  xDomain: [number, number]
+  yDomain: [number, number]
+  controlledXDomain: [number, number]
+  controlledYDomain: [number, number]
   xTicks: string[]
   yTicks: string[]
   margins: Margins
