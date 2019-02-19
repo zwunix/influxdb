@@ -6,6 +6,7 @@ import (
 	"time"
 
 	bolt "github.com/coreos/bbolt"
+	influxdb "github.com/influxdata/influxdb"
 	platform "github.com/influxdata/influxdb"
 )
 
@@ -22,8 +23,8 @@ func (c *Client) initializeSessions(ctx context.Context, tx *bolt.Tx) error {
 	return nil
 }
 
-// RenewSession extends the expire time to newExpiration.
-func (c *Client) RenewSession(ctx context.Context, session *platform.Session, newExpiration time.Time) error {
+// RenewSession extends the expire time to influxdb.RenewSessionTime.
+func (c *Client) RenewSession(ctx context.Context, session *platform.Session) error {
 	op := getOp(platform.OpRenewSession)
 	if session == nil {
 		return &platform.Error{
@@ -32,7 +33,7 @@ func (c *Client) RenewSession(ctx context.Context, session *platform.Session, ne
 		}
 	}
 	return c.db.Update(func(tx *bolt.Tx) error {
-		session.ExpiresAt = newExpiration
+		session.ExpiresAt = time.Now().Add(influxdb.RenewSessionTime)
 		if err := c.putSession(ctx, tx, session); err != nil {
 			return &platform.Error{
 				Op:  op,

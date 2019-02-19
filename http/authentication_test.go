@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	platform "github.com/influxdata/influxdb"
 	platformhttp "github.com/influxdata/influxdb/http"
@@ -40,7 +39,7 @@ func TestAuthenticationHandler(t *testing.T) {
 					FindSessionFn: func(ctx context.Context, key string) (*platform.Session, error) {
 						return &platform.Session{}, nil
 					},
-					RenewSessionFn: func(ctx context.Context, session *platform.Session, expiredAt time.Time) error {
+					RenewSessionFn: func(ctx context.Context, session *platform.Session) error {
 						return nil
 					},
 				},

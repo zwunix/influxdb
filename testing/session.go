@@ -287,9 +287,8 @@ func RenewSession(
 	t *testing.T,
 ) {
 	type args struct {
-		session  *platform.Session
-		key      string
-		expireAt time.Time
+		session *platform.Session
+		key     string
 	}
 
 	type wants struct {
@@ -324,15 +323,14 @@ func RenewSession(
 					Key:       "abc123xyz",
 					ExpiresAt: time.Date(2030, 9, 26, 0, 0, 0, 0, time.UTC),
 				},
-				key:      "abc123xyz",
-				expireAt: time.Date(2031, 9, 26, 0, 0, 10, 0, time.UTC),
+				key: "abc123xyz",
 			},
 			wants: wants{
 				session: &platform.Session{
 					ID:        MustIDBase16(sessionOneID),
 					UserID:    MustIDBase16(sessionTwoID),
 					Key:       "abc123xyz",
-					ExpiresAt: time.Date(2031, 9, 26, 0, 0, 10, 0, time.UTC),
+					ExpiresAt: time.Date(2030, 9, 26, 1, 0, 0, 0, time.UTC),
 				},
 			},
 		},
@@ -351,8 +349,7 @@ func RenewSession(
 				},
 			},
 			args: args{
-				key:      "abc123xyz",
-				expireAt: time.Date(2031, 9, 26, 0, 0, 10, 0, time.UTC),
+				key: "abc123xyz",
 			},
 			wants: wants{
 				err: &platform.Error{
@@ -364,7 +361,7 @@ func RenewSession(
 					ID:        MustIDBase16(sessionOneID),
 					UserID:    MustIDBase16(sessionTwoID),
 					Key:       "abc123xyz",
-					ExpiresAt: time.Date(2031, 9, 26, 0, 0, 10, 0, time.UTC),
+					ExpiresAt: time.Date(2030, 9, 26, 0, 0, 0, 0, time.UTC),
 				},
 			},
 		},
@@ -376,7 +373,7 @@ func RenewSession(
 			defer done()
 			ctx := context.Background()
 
-			err := s.RenewSession(ctx, tt.args.session, tt.args.expireAt)
+			err := s.RenewSession(ctx, tt.args.session)
 			diffPlatformErrors(tt.name, err, tt.wants.err, opPrefix, t)
 
 			session, err := s.FindSession(ctx, tt.args.key)

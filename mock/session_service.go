@@ -3,7 +3,6 @@ package mock
 import (
 	"context"
 	"fmt"
-	"time"
 
 	platform "github.com/influxdata/influxdb"
 )
@@ -14,7 +13,7 @@ type SessionService struct {
 	FindSessionFn   func(context.Context, string) (*platform.Session, error)
 	ExpireSessionFn func(context.Context, string) error
 	CreateSessionFn func(context.Context, string) (*platform.Session, error)
-	RenewSessionFn  func(ctx context.Context, session *platform.Session, newExpiration time.Time) error
+	RenewSessionFn  func(ctx context.Context, session *platform.Session) error
 }
 
 // NewSessionService returns a mock SessionService where its methods will return
@@ -24,7 +23,7 @@ func NewSessionService() *SessionService {
 		FindSessionFn:   func(context.Context, string) (*platform.Session, error) { return nil, fmt.Errorf("mock session") },
 		CreateSessionFn: func(context.Context, string) (*platform.Session, error) { return nil, fmt.Errorf("mock session") },
 		ExpireSessionFn: func(context.Context, string) error { return fmt.Errorf("mock session") },
-		RenewSessionFn: func(ctx context.Context, session *platform.Session, expiredAt time.Time) error {
+		RenewSessionFn: func(ctx context.Context, session *platform.Session) error {
 			return fmt.Errorf("mock session")
 		},
 	}
@@ -46,6 +45,6 @@ func (s *SessionService) ExpireSession(ctx context.Context, key string) error {
 }
 
 // RenewSession extends the expire time to newExpiration.
-func (s *SessionService) RenewSession(ctx context.Context, session *platform.Session, expiredAt time.Time) error {
-	return s.RenewSessionFn(ctx, session, expiredAt)
+func (s *SessionService) RenewSession(ctx context.Context, session *platform.Session) error {
+	return s.RenewSessionFn(ctx, session)
 }
