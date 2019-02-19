@@ -183,7 +183,7 @@ func FindSession(
 			},
 		},
 		{
-			name: "look for not exising session",
+			name: "look for nonexistent session",
 			args: args{
 				key: "abc123xyz",
 			},
