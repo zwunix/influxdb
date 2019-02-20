@@ -355,15 +355,21 @@ export const VIS_GRAPHICS = [
     graphic: GRAPHIC_SVGS[ViewType.XY],
   },
   {
-    type: ViewType.LinePlusSingleStat,
-    name: 'Graph + Single Stat',
-    graphic: GRAPHIC_SVGS[ViewType.LinePlusSingleStat],
-  },
-  {
     type: ViewType.Histogram,
     name: 'Histogram',
     // TODO: Create a histogarm graphic
     graphic: GRAPHIC_SVGS[ViewType.XY],
+  },
+  {
+    type: ViewType.Heatmap,
+    name: 'Heatmap',
+    // TODO: Create a heatmap graphic
+    graphic: GRAPHIC_SVGS[ViewType.XY],
+  },
+  {
+    type: ViewType.LinePlusSingleStat,
+    name: 'Graph + Single Stat',
+    graphic: GRAPHIC_SVGS[ViewType.LinePlusSingleStat],
   },
   {
     type: ViewType.SingleStat,

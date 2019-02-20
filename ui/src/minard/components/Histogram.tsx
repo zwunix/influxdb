@@ -46,7 +46,7 @@ export const Histogram: SFC<Props> = ({
 
   const layer = useLayer(
     env,
-    () => {
+    (): Partial<HistogramLayer> => {
       const [table, mappings] = bin(
         baseTable,
         x,
@@ -59,7 +59,7 @@ export const Histogram: SFC<Props> = ({
       return {type: 'histogram', table, mappings, colors}
     },
     [baseTable, xDomain, x, fill, position, binCount, colors]
-  ) as HistogramLayer
+  )
 
   if (!layer) {
     return null

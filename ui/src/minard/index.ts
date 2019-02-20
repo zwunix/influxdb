@@ -76,7 +76,9 @@ export interface Table {
   }
 }
 
-export type LayerType = 'base' | 'histogram'
+export type LayerType = 'base' | 'histogram' | 'heatmap'
+
+export {Heatmap} from 'src/minard/components/Heatmap'
 
 export interface Scale<D = number, R = number> {
   (x: D): R
@@ -131,7 +133,39 @@ export interface HistogramLayer {
   colors: string[]
 }
 
-export type Layer = BaseLayer | HistogramLayer
+export interface HeatmapMappings {
+  xMin: 'xMin'
+  xMax: 'xMax'
+  yMin: 'yMin'
+  yMax: 'yMax'
+  fill: 'count'
+}
+
+export interface HeatmapTable extends Table {
+  columns: {
+    xMin: FloatColumn | TimeColumn
+    xMax: FloatColumn | TimeColumn
+    yMin: FloatColumn | TimeColumn
+    yMax: FloatColumn | TimeColumn
+    count: IntColumn
+  }
+  length: number
+}
+
+export interface HeatmapScales {
+  // x and y scale are from the `BaseLayer`
+  fill: Scale<number, string>
+}
+
+export interface HeatmapLayer {
+  type: 'heatmap'
+  table: HeatmapTable
+  mappings: HeatmapMappings
+  scales: HeatmapScales
+  colors: string[]
+}
+
+export type Layer = BaseLayer | HistogramLayer | HeatmapLayer
 
 export interface Margins {
   top: number

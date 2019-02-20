@@ -418,6 +418,12 @@ export const timeMachineReducer = (
       return setViewProperties(state, {colors})
     }
 
+    case 'SET_COLOR_SCHEME': {
+      const {colors} = action.payload
+
+      return setViewProperties(state, {colors})
+    }
+
     case 'SET_STATIC_LEGEND': {
       const {staticLegend} = action.payload
 

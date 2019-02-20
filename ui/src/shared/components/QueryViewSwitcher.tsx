@@ -8,6 +8,7 @@ import SingleStatTransform from 'src/shared/components/SingleStatTransform'
 import TableGraphs from 'src/shared/components/tables/TableGraphs'
 import DygraphContainer from 'src/shared/components/DygraphContainer'
 import Histogram from 'src/shared/components/Histogram'
+import Heatmap from 'src/shared/components/Heatmap'
 
 // Types
 import {
@@ -86,6 +87,8 @@ export default class QueryViewSwitcher extends PureComponent<Props> {
         )
       case ViewType.Histogram:
         return <Histogram tables={tables} properties={properties} />
+      case ViewType.Heatmap:
+        return <Heatmap tables={tables} properties={properties} />
       default:
         return <div />
     }

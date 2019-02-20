@@ -62,6 +62,7 @@ export type Action =
   | TableLoadedAction
   | SetXDomainAction
   | SetXAxisLabelAction
+  | SetColorSchemeAction
 
 interface SetActiveTimeMachineAction {
   type: 'SET_ACTIVE_TIME_MACHINE'
@@ -549,4 +550,14 @@ interface SetXAxisLabelAction {
 export const setXAxisLabel = (xAxisLabel: string): SetXAxisLabelAction => ({
   type: 'SET_X_AXIS_LABEL',
   payload: {xAxisLabel},
+})
+
+interface SetColorSchemeAction {
+  type: 'SET_COLOR_SCHEME'
+  payload: {colors: string[]}
+}
+
+export const setColorScheme = (colors: string[]): SetColorSchemeAction => ({
+  type: 'SET_COLOR_SCHEME',
+  payload: {colors},
 })

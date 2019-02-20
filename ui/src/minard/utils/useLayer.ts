@@ -8,18 +8,18 @@ import {registerLayer, unregisterLayer} from 'src/minard/utils/plotEnvActions'
   Register a layer in the plot environment. A layer can optionally specify its
   own data, color scheme, and data-to-aesthetic mappings.
 */
-export const useLayer = (
+export const useLayer = <L extends Layer>(
   env: PlotEnv,
-  layerFactory: () => Partial<Layer>,
+  layerFactory: () => Partial<L>,
   inputs?: DependencyList
-) => {
+): L => {
   const {current: layerKey} = useRef(uuid.v4())
 
   useEffect(() => {
-    env.dispatch(registerLayer(layerKey, layerFactory()))
+    env.dispatch(registerLayer(layerKey, layerFactory() as L))
 
     return () => env.dispatch(unregisterLayer(layerKey))
   }, inputs)
 
-  return env.layers[layerKey]
+  return env.layers[layerKey] as L
 }

@@ -124,6 +124,7 @@ export type ViewProperties =
   | EmptyView
   | LogViewerView
   | HistogramView
+  | HeatmapView
 
 export type QueryViewProperties = Extract<
   ViewProperties,
@@ -235,6 +236,18 @@ export interface HistogramView {
   showNoteWhenEmpty: boolean
 }
 
+export interface HeatmapView {
+  type: ViewType.Heatmap
+  shape: ViewShape.ChronografV2
+  queries: DashboardQuery[]
+  xColumn: string
+  yColumn: string
+  binSize: number
+  colors: string[]
+  note: string
+  showNoteWhenEmpty: boolean
+}
+
 export interface MarkdownView {
   type: ViewType.Markdown
   shape: ViewShape.ChronografV2
@@ -273,6 +286,7 @@ export enum ViewType {
   Markdown = 'markdown',
   LogViewer = 'log-viewer',
   Histogram = 'histogram',
+  Heatmap = 'heatmap',
 }
 
 export interface DashboardFile {

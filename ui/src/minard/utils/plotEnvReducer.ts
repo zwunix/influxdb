@@ -1,5 +1,6 @@
 import {extent, ticks} from 'd3-array'
-import {scaleLinear, scaleOrdinal} from 'd3-scale'
+import {interpolateRgbBasis} from 'd3-interpolate'
+import {scaleLinear, scaleOrdinal, scaleSequential} from 'd3-scale'
 import {produce} from 'immer'
 import chroma from 'chroma-js'
 
@@ -7,6 +8,7 @@ import {
   PlotEnv,
   Layer,
   HistogramLayer,
+  HeatmapLayer,
   Scale,
   PLOT_PADDING,
   TICK_CHAR_WIDTH,
@@ -335,9 +337,22 @@ const getFillDomain = ({table, mappings}: HistogramLayer): string[] => {
 const setFillScales = (draftState: PlotEnv) => {
   const layers = Object.values(draftState.layers)
 
+  // Set the fill scale for layers with an discrete fill domain
   layers
     .filter(layer => layer.type === 'histogram')
     .forEach((layer: HistogramLayer) => {
       layer.scales.fill = getColorScale(getFillDomain(layer), layer.colors)
+    })
+
+  // Set the fill scale for layers with an continuous fill domain
+  layers
+    .filter(layer => layer.type === 'heatmap')
+    .forEach((layer: HeatmapLayer) => {
+      const domain = extent(layer.table.columns[layer.mappings.fill].data)
+      // const colorScheme = interpolateMagma
+      const colorScheme = interpolateRgbBasis(layer.colors)
+      const scale: unknown = scaleSequential(colorScheme).domain(domain)
+
+      layer.scales.fill = scale as Scale<number, string>
     })
 }

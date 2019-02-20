@@ -96,6 +96,10 @@ export const Plot: SFC<Props> = ({
     [env, hoverX, hoverY, dispatch]
   )
 
+  if (width === 0 || height === 0) {
+    return null
+  }
+
   const plotStyle: CSSProperties = {
     position: 'relative',
     width: `${width}px`,
