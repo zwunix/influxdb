@@ -120,7 +120,7 @@ func (s FromProcedureSpec) PostPhysicalValidate(id plan.NodeID) error {
 	return fmt.Errorf(`%s: results from "%s" must be bounded`, id, bucket)
 }
 
-const PhysicalFromKind = "physFrom"
+const PhysicalFromKind = "influxDBPhysFrom"
 
 type PhysicalFromProcedureSpec struct {
 	FromProcedureSpec
@@ -232,7 +232,7 @@ func (FromConversionRule) Pattern() plan.Pattern {
 
 func (FromConversionRule) Rewrite(pn plan.PlanNode) (plan.PlanNode, bool, error) {
 	logicalFromSpec := pn.ProcedureSpec().(*FromProcedureSpec)
-	newNode := plan.CreatePhysicalNode(pn.ID(), &PhysicalFromProcedureSpec{
+	newNode := plan.CreatePhysicalNode("phys_"+pn.ID(), &PhysicalFromProcedureSpec{
 		FromProcedureSpec: *logicalFromSpec,
 	})
 

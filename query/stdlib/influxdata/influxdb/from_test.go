@@ -219,7 +219,7 @@ func TestFromRangeRule(t *testing.T) {
 			},
 			After: &plantest.PlanSpec{
 				Nodes: []plan.PlanNode{
-					plan.CreatePhysicalNode("merged_from_range", fromWithBounds),
+					plan.CreatePhysicalNode("merged_phys_from_range", fromWithBounds),
 				},
 			},
 		},
@@ -240,7 +240,7 @@ func TestFromRangeRule(t *testing.T) {
 			},
 			After: &plantest.PlanSpec{
 				Nodes: []plan.PlanNode{
-					plan.CreatePhysicalNode("merged_from_range", fromWithBounds),
+					plan.CreatePhysicalNode("merged_phys_from_range", fromWithBounds),
 					plan.CreatePhysicalNode("count", count),
 				},
 				Edges: [][2]int{{0, 1}},
@@ -263,7 +263,7 @@ func TestFromRangeRule(t *testing.T) {
 			},
 			After: &plantest.PlanSpec{
 				Nodes: []plan.PlanNode{
-					plan.CreatePhysicalNode("merged_from_range0_range1", fromWithIntersectedBounds),
+					plan.CreatePhysicalNode("merged_phys_from_range0_range1", fromWithIntersectedBounds),
 				},
 			},
 		},
@@ -294,7 +294,7 @@ func TestFromRangeRule(t *testing.T) {
 			},
 			After: &plantest.PlanSpec{
 				Nodes: []plan.PlanNode{
-					plan.CreatePhysicalNode("merged_from_range", fromWithBounds),
+					plan.CreatePhysicalNode("merged_phys_from_range", fromWithBounds),
 					plan.CreatePhysicalNode("count", count),
 					plan.CreatePhysicalNode("yield0", yield("count")),
 					plan.CreatePhysicalNode("mean", mean),
@@ -480,7 +480,7 @@ func TestFromFilterRule(t *testing.T) {
 			},
 			After: &plantest.PlanSpec{
 				Nodes: []plan.PlanNode{
-					plan.CreatePhysicalNode("merged_from_range_filter", &influxdb.PhysicalFromProcedureSpec{
+					plan.CreatePhysicalNode("merged_phys_from_range_filter", &influxdb.PhysicalFromProcedureSpec{
 						BoundsSet: true,
 						Bounds: flux.Bounds{
 							Start: fluxTime(5),
@@ -716,7 +716,7 @@ func TestFromGroupRule(t *testing.T) {
 			},
 			After: &plantest.PlanSpec{
 				Nodes: []plan.PlanNode{
-					plan.CreatePhysicalNode("merged_from_range_group1", &influxdb.PhysicalFromProcedureSpec{
+					plan.CreatePhysicalNode("merged_phys_from_range_group1", &influxdb.PhysicalFromProcedureSpec{
 						BoundsSet:   true,
 						Bounds:      flux.Bounds{Start: fluxTime(5), Stop: fluxTime(10)},
 						GroupingSet: true,
