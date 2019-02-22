@@ -47,7 +47,7 @@ class EditLabelsOverlay<T> extends PureComponent<Props<T>, State> {
     super(props)
 
     this.state = {
-      selectedLabels: _.get(props, 'resource.labels'),
+      selectedLabels: _.get(props, 'resource.labels', []),
       loading: RemoteDataState.NotStarted,
     }
   }
@@ -158,7 +158,13 @@ class EditLabelsOverlay<T> extends PureComponent<Props<T>, State> {
     this.setState({loading: RemoteDataState.Loading})
 
     if (addedLabels.length) {
+      try{
+
       await onAddLabels(resourceID, addedLabels)
+      }
+      catch(err){
+        console.error(err)
+      }
     }
 
     if (removedLabels.length) {

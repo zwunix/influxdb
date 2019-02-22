@@ -1,5 +1,6 @@
 // Libraries
 import React, {PureComponent} from 'react'
+import {isEmpty} from 'lodash'
 
 // Components
 import {
@@ -7,6 +8,7 @@ import {
   Stack,
   IndexList,
   ConfirmationButton,
+  Label
 } from 'src/clockface'
 import {
   ComponentSize,
@@ -28,6 +30,7 @@ interface Props {
   onUpdate: (telegraf: Telegraf) => void
   onOpenInstructions: (telegrafID: string) => void
   onOpenTelegrafConfig: (telegrafID: string, telegrafName: string) => void
+  onOpenLabels: (telegrafID: string) => void
 }
 
 export default class CollectorRow extends PureComponent<Props> {
@@ -43,12 +46,18 @@ export default class CollectorRow extends PureComponent<Props> {
               align={Alignment.Left}
               stretchToFitWidth={true}
             >
+            <ComponentSpacer
+            stackChildren={Stack.Columns}
+            align={Alignment.Left}
+            >
               <EditableName
                 onUpdate={this.handleUpdateName}
                 name={collector.name}
                 noNameString={DEFAULT_COLLECTOR_NAME}
                 onEditName={this.handleOpenConfig}
               />
+              {this.labels}
+            </ComponentSpacer>
               <EditableDescription
                 description={collector.description}
                 placeholder={`Describe ${collector.name}`}
@@ -78,6 +87,39 @@ export default class CollectorRow extends PureComponent<Props> {
     )
   }
 
+  private get labels(): JSX.Element {
+    const {collector} = this.props
+
+    if (isEmpty(collector.labels)) {
+      return (
+        <Label.Container
+          limitChildCount={4}
+          onEdit={this.handleOpenLabels}
+          resourceName="this Telegraf Config"
+        />
+      )
+    }
+
+    return (
+      <Label.Container
+        limitChildCount={4}
+        className="index-list--labels"
+        onEdit={this.handleOpenLabels}
+        resourceName="this Telegraf Config"
+      >
+        {collector.labels.map((label, index) => (
+          <Label
+            key={label.id || `label-${index}`}
+            id={label.id}
+            colorHex={label.properties.color}
+            name={label.name}
+            description={label.properties.description}
+          />
+        ))}
+      </Label.Container>
+    )
+  }
+
   private handleUpdateName = (name: string) => {
     const {onUpdate, collector} = this.props
 
@@ -88,6 +130,12 @@ export default class CollectorRow extends PureComponent<Props> {
     const {onUpdate, collector} = this.props
 
     onUpdate({...collector, description})
+  }
+  
+  private handleOpenLabels = (): void => {
+    this.props.onOpenLabels(
+      this.props.collector.id,
+    )
   }
 
   private handleOpenConfig = (): void => {

@@ -18,6 +18,8 @@ import {
 import {EmptyState, Grid, Input, InputType, Tabs} from 'src/clockface'
 import CollectorsWizard from 'src/dataLoaders/components/collectorsWizard/CollectorsWizard'
 import FilterList from 'src/shared/components/Filter'
+import EditLabelsOverlay from 'src/shared/components/EditLabelsOverlay'
+import {OverlayTechnology} from 'src/clockface'
 
 // APIS
 import {client} from 'src/utils/api'
@@ -30,7 +32,7 @@ import {setBucketInfo} from 'src/dataLoaders/actions/steps'
 import {ErrorHandling} from 'src/shared/decorators/errors'
 
 // Types
-import {Telegraf, Bucket} from '@influxdata/influx'
+import {Telegraf, Bucket, Label} from '@influxdata/influx'
 import {OverlayState} from 'src/types'
 import {
   setDataLoadersType,
@@ -64,6 +66,7 @@ interface State {
   instructionsOverlay: OverlayState
   collectorID?: string
   telegrafConfig: OverlayState
+  labelsOverlay: OverlayState
 }
 
 @ErrorHandling
@@ -77,6 +80,7 @@ export class Collectors extends PureComponent<Props, State> {
       instructionsOverlay: OverlayState.Closed,
       collectorID: null,
       telegrafConfig: OverlayState.Closed,
+      labelsOverlay: OverlayState.Closed,
     }
   }
 
@@ -114,6 +118,7 @@ export class Collectors extends PureComponent<Props, State> {
                     onUpdate={this.handleUpdateTelegraf}
                     onOpenInstructions={this.handleOpenInstructions}
                     onOpenTelegrafConfig={this.handleOpenTelegrafConfig}
+                    onOpenLabels={this.handleOpenLabels}
                   />
                 )}
               </FilterList>
@@ -143,6 +148,14 @@ export class Collectors extends PureComponent<Props, State> {
           visible={this.isTelegrafConfigVisible}
           onDismiss={this.handleCloseTelegrafConfig}
         />
+      <OverlayTechnology visible={this.isLabelsOverlayVisible}>
+        <EditLabelsOverlay<Telegraf>
+          resource={this.selectedCollector}
+          onDismissOverlay={this.handleCloseLabels}
+          onAddLabels={this.handleAddLabels}
+          onRemoveLabels={this.handleRemoveLabels}
+        />
+      </OverlayTechnology>
       </>
     )
   }
@@ -158,6 +171,10 @@ export class Collectors extends PureComponent<Props, State> {
   private get isInstructionsVisible(): boolean {
     return this.state.instructionsOverlay === OverlayState.Open
   }
+  
+  private get isLabelsOverlayVisible(): boolean {
+    return this.state.labelsOverlay === OverlayState.Open
+  }
 
   private handleOpenInstructions = (collectorID: string): void => {
     this.setState({
@@ -171,6 +188,37 @@ export class Collectors extends PureComponent<Props, State> {
       instructionsOverlay: OverlayState.Closed,
       collectorID: null,
     })
+  }
+
+  private handleOpenLabels = (collectorID: string): void => {
+    this.setState({
+      labelsOverlay: OverlayState.Open,
+      collectorID,
+    })
+  }
+
+  private handleCloseLabels = (): void => {
+    this.setState({
+      labelsOverlay: OverlayState.Closed,
+      collectorID: null,
+    })
+  }
+
+  private handleAddLabels = (telegrafID: string, labels: Label[]): void => {
+    try {
+      client.telegrafConfigs.addLabels(telegrafID, labels)
+    } catch(err) {
+      console.error(err)
+    }
+  }
+
+  private handleRemoveLabels = (telegrafID: string, labels: Label[]): void => {
+    try {
+      const promises = labels.map(l => client.telegrafConfigs.removeLabel(telegrafID, l))
+      Promise.all(promises)
+    } catch(err) {
+      console.error(err)
+    }
   }
 
   private get isTelegrafConfigVisible(): boolean {
