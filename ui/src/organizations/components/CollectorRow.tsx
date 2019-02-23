@@ -39,7 +39,7 @@ export default class CollectorRow extends PureComponent<Props> {
 
     return (
       <>
-        <IndexList.Row>
+        <IndexList.Row testID="collector-row">
           <IndexList.Cell>
             <ComponentSpacer
               stackChildren={Stack.Rows}

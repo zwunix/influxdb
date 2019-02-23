@@ -108,6 +108,7 @@ class StreamingSelector extends PureComponent<Props, State> {
                 checked={this.isCardChecked(b)}
                 onClick={this.handleToggle(b)}
                 image={BUNDLE_LOGOS[b]}
+                testID={`bundle-${b.toLowerCase()}`}
               />
             )
           })}

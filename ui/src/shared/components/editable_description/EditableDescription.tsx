@@ -40,7 +40,7 @@ class EditableDescription extends Component<Props, State> {
 
     if (isEditing) {
       return (
-        <div className="editable-description">
+        <div className="editable-description" data-testid="editable-description">
           <ClickOutside onClickOutside={this.handleStopEditing}>
             {this.input}
           </ClickOutside>
@@ -49,7 +49,7 @@ class EditableDescription extends Component<Props, State> {
     }
 
     return (
-      <div className="editable-description">
+      <div className="editable-description" data-testid="editable-description">
         <div
           className={this.previewClassName}
           onClick={this.handleStartEditing}

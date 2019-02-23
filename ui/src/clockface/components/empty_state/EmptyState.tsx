@@ -33,7 +33,7 @@ class EmptyState extends Component<Props> {
 
     const className = `empty-state empty-state--${size}`
 
-    return <div className={className}>{children}</div>
+    return <div className={className} data-testid="empty-state">{children}</div>
   }
 }
 

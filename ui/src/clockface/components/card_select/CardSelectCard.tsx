@@ -12,6 +12,7 @@ interface Props {
   checked?: boolean
   disabled?: boolean
   onClick: () => void
+  testID?: string
 }
 
 @ErrorHandling
@@ -19,13 +20,15 @@ class CardSelectCard extends PureComponent<Props> {
   public static defaultProps: Partial<Props> = {
     checked: false,
     disabled: false,
+    testID: 'select-card'
   }
 
   public render() {
-    const {id, label, checked, name, disabled} = this.props
+    const {id, label, checked, name, disabled, testID} = this.props
     return (
       <div
         data-toggle="card_toggle"
+        data-testid={testID}
         onClick={this.handleClick}
         className={classnames('card-select--card', {
           'card-select--checked': checked,

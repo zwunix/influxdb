@@ -50,7 +50,7 @@ class EditableName extends Component<Props, State> {
     const {name, onEditName, hrefValue, noNameString} = this.props
 
     return (
-      <div className={this.className}>
+      <div className={this.className} data-testid="editable-name">
         <a href={hrefValue} onClick={onEditName}>
           <span>{name || noNameString}</span>
         </a>

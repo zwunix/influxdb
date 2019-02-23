@@ -81,6 +81,7 @@ export class TelegrafPluginInstructions extends PureComponent<Props> {
                     titleText="Telegraf Configuration Name"
                     size={ComponentSize.Medium}
                     autoFocus={true}
+                    name="telegraf-name"
                   />
                 </Form.Element>
                 <Form.Element label="Telegraf Configuration Description">
@@ -90,6 +91,7 @@ export class TelegrafPluginInstructions extends PureComponent<Props> {
                     onChange={this.handleDescriptionInput}
                     titleText="Telegraf Configuration Description"
                     size={ComponentSize.Medium}
+                    name="telegraf-description"
                   />
                 </Form.Element>
               </FancyScrollbar>

@@ -38,7 +38,7 @@ export const createBucket = (): Cypress.Chainable<Cypress.Response> => {
     method: 'POST',
     url: '/api/v2/buckets',
     body: {
-      name: 'test org',
+      name: 'test 🅱️ucket',
     },
   })
 }

@@ -65,6 +65,7 @@ class OnboardingButtons extends PureComponent<Props> {
             ref={this.submitRef}
             status={nextButtonStatus}
             tabIndex={0}
+            testID="continue-button"
           />
         </div>
         {this.skipButton}

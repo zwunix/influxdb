@@ -250,6 +250,7 @@ export class Collectors extends PureComponent<Props, State> {
         icon={IconFont.Plus}
         color={ComponentColor.Primary}
         onClick={this.handleAddCollector}
+        testID="create-button"
       />
     )
   }
@@ -278,7 +279,7 @@ export class Collectors extends PureComponent<Props, State> {
 
     if (_.isEmpty(searchTerm)) {
       return (
-        <EmptyState size={ComponentSize.Medium}>
+        <EmptyState size={ComponentSize.Medium} >
           <EmptyState.Text
             text={`${orgName} does not own any Telegraf  Configurations, why not create one?`}
             highlightWords={['Telegraf', 'Configurations']}
