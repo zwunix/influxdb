@@ -41,6 +41,7 @@ import OrgTelegrafsIndex from 'src/organizations/containers/OrgTelegrafsIndex'
 import OrgVariablesIndex from 'src/organizations/containers/OrgVariablesIndex'
 import OrgScrapersIndex from 'src/organizations/containers/OrgScrapersIndex'
 import OrgTasksIndex from 'src/organizations/containers/OrgTasksIndex'
+import ExportOverlayMaybe from 'src/shared/components/ExportOverlayMaybe'
 
 import OnboardingWizardPage from 'src/onboarding/containers/OnboardingWizardPage'
 
@@ -112,25 +113,33 @@ class Root extends PureComponent {
                               path="tasks/:id"
                               component={OrgTaskEditPage}
                             />
-                            <Route path="buckets" component={OrgBucketIndex} />
-                            <Route
-                              path="dashboards"
-                              component={OrgDashboardsIndex}
-                            />
-                            <Route path="members" component={OrgMembersIndex} />
-                            <Route
-                              path="telegrafs"
-                              component={OrgTelegrafsIndex}
-                            />
-                            <Route
-                              path="variables"
-                              component={OrgVariablesIndex}
-                            />
-                            <Route
-                              path="scrapers"
-                              component={OrgScrapersIndex}
-                            />
-                            <Route path="tasks" component={OrgTasksIndex} />
+                            <Route component={ExportOverlayMaybe}>
+                              <Route
+                                path="buckets"
+                                component={OrgBucketIndex}
+                              />
+                              <Route
+                                path="dashboards"
+                                component={OrgDashboardsIndex}
+                              />
+                              <Route
+                                path="members"
+                                component={OrgMembersIndex}
+                              />
+                              <Route
+                                path="telegrafs"
+                                component={OrgTelegrafsIndex}
+                              />
+                              <Route
+                                path="variables"
+                                component={OrgVariablesIndex}
+                              />
+                              <Route
+                                path="scrapers"
+                                component={OrgScrapersIndex}
+                              />
+                              <Route path="tasks" component={OrgTasksIndex} />
+                            </Route>
                           </Route>
                         </Route>
                         <Route path="tasks">
