@@ -8,7 +8,7 @@ describe('Variables', () => {
       cy.signin(body.org.id)
 
       cy.wrap(body.org).as('org')
-      cy.visit(`organizations/${body.org.id}/variables_tab`)
+      cy.visit(`organizations/${body.org.id}/variables`)
     })
   })
 

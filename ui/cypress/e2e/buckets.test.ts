@@ -14,7 +14,7 @@ describe('Buckets', () => {
       cy.signin(id)
 
       cy.fixture('routes').then(({orgs}) => {
-        cy.visit(`${orgs}/${id}/buckets_tab`)
+        cy.visit(`${orgs}/${id}/buckets`)
       })
     })
   })
