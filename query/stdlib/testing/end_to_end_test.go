@@ -203,6 +203,8 @@ func testFlux(t testing.TB, l *Launcher, pkg *ast.Package) {
 
 	// Query server to ensure write persists.
 
+	//////////////////////////////////////////////
+	// REPLACE creating bucket on the server side
 	b := &platform.Bucket{
 		Organization:    "ORG",
 		Name:            t.Name(),
@@ -213,8 +215,12 @@ func testFlux(t testing.TB, l *Launcher, pkg *ast.Package) {
 	if err := s.CreateBucket(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
+	//////////////////////////////////////////////
 
+	//////////////////////////////////////////////
+	// KEEP modifying the test query to have a custom bucket
 	// Define bucket and org options
+	//  option bucket = b.Name
 	bucketOpt := &ast.OptionStatement{
 		Assignment: &ast.VariableAssignment{
 			ID:   &ast.Identifier{Name: "bucket"},
@@ -234,9 +240,14 @@ func testFlux(t testing.TB, l *Launcher, pkg *ast.Package) {
 	pkg.Files = append(pkg.Files, options)
 
 	// Add testing.inspect call to ensure the data is loaded
+	// testing.inspect(case: _test_name)
 	inspectCalls := stdlib.TestingInspectCalls(pkg)
 	pkg.Files = append(pkg.Files, inspectCalls)
+	//////////////////////////////////////////////
 
+	//////////////////////////////////////////////
+	// REPLACE submit the query and get a response.
+	// this query run is to make sure that loadStorage completes successfully
 	req := &query.Request{
 		OrganizationID: l.Org.ID,
 		Compiler:       lang.ASTCompiler{AST: pkg},
@@ -258,13 +269,20 @@ func testFlux(t testing.TB, l *Launcher, pkg *ast.Package) {
 	// so that our function-with-side effects call to `to` may run _after_ the test instead of before.
 	// running twice makes sure that `to` happens at least once before we run the test.
 	// this time we use a call to `run` so that the assertion error is triggered
+	//////////////////////////////////////////////
+	// KEEP:  change the testing.inspect   to a testing.run call
 	runCalls := stdlib.TestingRunCalls(pkg)
 	pkg.Files[len(pkg.Files)-1] = runCalls
+	//////////////////////////////////////////////
+
+	//////////////////////////////////////////////
+	// REPLACE RUN THE QUERY AGAIN
 	r, err := l.FluxService().Query(ctx, req)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	// check the result iterator for errors
 	for r.More() {
 		v := r.Next()
 		if err := v.Tables().Do(func(tbl flux.Table) error {
@@ -274,6 +292,7 @@ func testFlux(t testing.TB, l *Launcher, pkg *ast.Package) {
 		}
 	}
 	if err := r.Err(); err != nil {
+		// if there's errors, run the query a third time with testing.inspect
 		t.Error(err)
 		// Replace the testing.run calls with testing.inspect calls.
 		pkg.Files[len(pkg.Files)-1] = inspectCalls
