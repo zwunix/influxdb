@@ -14,7 +14,7 @@ interface Props {
   selected?: boolean
   checkbox?: boolean
   onClick?: (value: any) => void
-  testid?: string
+  testID?: string
 }
 
 @ErrorHandling
@@ -25,7 +25,7 @@ class DropdownItem extends Component<Props> {
   }
 
   public render(): JSX.Element {
-    const {selected, checkbox, id} = this.props
+    const {selected, checkbox, testID} = this.props
 
     return (
       <div
@@ -34,7 +34,7 @@ class DropdownItem extends Component<Props> {
           active: selected && !checkbox,
           'multi-select--item': checkbox,
         })}
-        data-testid={`dropdown--item ${id}`}
+        data-testid={`dropdown--item ${testID}`}
         onClick={this.handleClick}
       >
         {this.checkBox}

@@ -43,7 +43,7 @@ const QueryBuilderBucketDropdown: SFC<Props> = props => {
       buttonTestID="buckets--button"
     >
       {buckets.map(bucket => (
-        <Dropdown.Item key={bucket} id={bucket} value={bucket}>
+        <Dropdown.Item key={bucket} id={bucket} value={bucket} testID="bucket">
           {bucket}
         </Dropdown.Item>
       ))}

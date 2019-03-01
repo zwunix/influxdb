@@ -193,6 +193,7 @@ class Dropdown extends Component<Props, State> {
                         key={child.props.id}
                         selected={child.props.id === selectedID}
                         onClick={this.handleItemClick}
+                        testID={testID}
                       >
                         {child.props.children}
                       </DropdownItem>
