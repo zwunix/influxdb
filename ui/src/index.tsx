@@ -30,6 +30,7 @@ import TaskEditPage from 'src/tasks/containers/TaskEditPage'
 import DashboardPage from 'src/dashboards/components/DashboardPage'
 import DashboardsIndex from 'src/dashboards/components/dashboard_index/DashboardsIndex'
 import DashboardExportOverlay from 'src/dashboards/components/DashboardExportOverlay'
+import ImportDashboardOverlay from 'src/dashboards/components/ImportDashboardOverlay'
 import DataExplorerPage from 'src/dataExplorer/components/DataExplorerPage'
 import {MePage, Account} from 'src/me'
 import NotFound from 'src/shared/components/NotFound'
@@ -165,8 +166,8 @@ class Root extends PureComponent {
                           path="data-explorer"
                           component={DataExplorerPage}
                         />
-                        <Route path="dashboards">
-                          <IndexRoute component={DashboardsIndex} />
+                        <Route path="dashboards" component={DashboardsIndex}>
+                          {/* <IndexRoute component={DashboardsIndex} /> */}
                           <Route
                             path=":dashboardID"
                             component={DashboardPage}
@@ -174,6 +175,10 @@ class Root extends PureComponent {
                           <Route
                             path=":dashboardID/export"
                             component={DashboardExportOverlay}
+                          />
+                          <Route
+                            path="import"
+                            component={ImportDashboardOverlay}
                           />
                         </Route>
                         <Route path="me" component={MePage} />
