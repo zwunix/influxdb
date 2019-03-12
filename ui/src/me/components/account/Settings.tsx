@@ -11,6 +11,8 @@ import {
   Columns,
 } from '@influxdata/clockface'
 import {Form, Input, Panel, Grid} from 'src/clockface'
+import Test from 'src/me/components/account/Test'
+import TestThing from 'src/me/components/account/TestThing'
 
 interface StateProps {
   me: MeState
@@ -18,6 +20,7 @@ interface StateProps {
 
 interface State {
   me: MeState
+  visible: boolean
 }
 
 export class Settings extends PureComponent<StateProps, State> {
@@ -25,11 +28,12 @@ export class Settings extends PureComponent<StateProps, State> {
     super(props)
     this.state = {
       me: this.props.me,
+      visible: false,
     }
   }
 
   public render() {
-    const {me} = this.state
+    const {me, visible} = this.state
 
     return (
       <Grid>
@@ -52,12 +56,35 @@ export class Settings extends PureComponent<StateProps, State> {
                     />
                   </Form.Element>
                 </Form>
+                <Test
+                  timeout={250}
+                  visible={visible}
+                  trigger={() => (
+                    <button onClick={this.handleShow}>Toggle</button>
+                  )}
+                >
+                  {state => (
+                    <TestThing
+                      state={state}
+                      color="#00ffcc"
+                      onDismiss={this.handleDismiss}
+                    />
+                  )}
+                </Test>
               </Panel.Body>
             </Panel>
           </Grid.Column>
         </Grid.Row>
       </Grid>
     )
+  }
+
+  private handleShow = () => {
+    this.setState({visible: true})
+  }
+
+  private handleDismiss = () => {
+    this.setState({visible: false})
   }
 
   private handleChangeInput = (_: ChangeEvent<HTMLInputElement>): void => {
