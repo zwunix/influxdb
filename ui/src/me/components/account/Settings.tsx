@@ -10,7 +10,7 @@ import {
   ComponentStatus,
   Columns,
 } from '@influxdata/clockface'
-import {Form, Input, Panel, Grid} from 'src/clockface'
+import {Form, Input, Panel, Grid, Dropdown} from 'src/clockface'
 
 interface StateProps {
   me: MeState
@@ -18,13 +18,34 @@ interface StateProps {
 
 interface State {
   me: MeState
+  dropdownSelected: string
 }
+
+const items = [
+  'a',
+  'b',
+  'c',
+  'd',
+  'e',
+  'f',
+  'g',
+  'h',
+  'i',
+  'j',
+  'k',
+  'l',
+  'm',
+  'n',
+  'o',
+  'p',
+]
 
 export class Settings extends PureComponent<StateProps, State> {
   constructor(props) {
     super(props)
     this.state = {
       me: this.props.me,
+      dropdownSelected: items[0],
     }
   }
 
@@ -52,6 +73,7 @@ export class Settings extends PureComponent<StateProps, State> {
                     />
                   </Form.Element>
                 </Form>
+                {this.dropdown}
               </Panel.Body>
             </Panel>
           </Grid.Column>
@@ -62,6 +84,27 @@ export class Settings extends PureComponent<StateProps, State> {
 
   private handleChangeInput = (_: ChangeEvent<HTMLInputElement>): void => {
     //  console.log('changing: ', e)
+  }
+
+  private get dropdown(): JSX.Element {
+    const {dropdownSelected} = this.state
+
+    return (
+      <Dropdown
+        selectedID={dropdownSelected}
+        onChange={this.handleDropdownChange}
+      >
+        {items.map(item => (
+          <Dropdown.Item key={item} value={item} id={item}>
+            {item}
+          </Dropdown.Item>
+        ))}
+      </Dropdown>
+    )
+  }
+
+  private handleDropdownChange = (dropdownSelected: string): void => {
+    this.setState({dropdownSelected})
   }
 }
 
