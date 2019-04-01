@@ -31,9 +31,10 @@ import * as copy from 'src/shared/copy/notifications'
 // Types
 import {Dispatch} from 'redux-thunk'
 import {RemoteDataState, VariableTemplate} from 'src/types'
-import {GetState} from 'src/types'
+import {GetState, Label} from 'src/types'
 import {Variable} from '@influxdata/influx'
 import {VariableValuesByID} from 'src/variables/types'
+import {labelDeleteFailed} from 'src/shared/copy/v2/notifications'
 
 export type Action =
   | SetVariables
@@ -293,5 +294,37 @@ export const convertToTemplate = (variableID: string) => async (
   } catch (error) {
     dispatch(setExportTemplate(RemoteDataState.Error))
     dispatch(notify(copy.createTemplateFailed(error)))
+  }
+}
+
+export const addVariableLabelsAsync = (
+  variableID: string,
+  labels: Label[]
+) => async (dispatch): Promise<void> => {
+  try {
+    await client.variables.addLabels(variableID, labels.map(l => l.id))
+
+    const variable = await client.variables.get(variableID)
+
+    dispatch(setVariable(variable.id, RemoteDataState.Done, variable))
+  } catch (error) {
+    console.error(error)
+    dispatch(notify(copy.createLabelFailed()))
+  }
+}
+
+export const removeVariableLabelsAsync = (
+  variableID: string,
+  labels: Label[]
+) => async (dispatch): Promise<void> => {
+  try {
+    await client.variables.removeLabels(variableID, labels.map(l => l.id))
+
+    const variable = await client.variables.get(variableID)
+
+    dispatch(setVariable(variable.id, RemoteDataState.Done, variable))
+  } catch (error) {
+    console.error(error)
+    dispatch(notify(labelDeleteFailed()))
   }
 }

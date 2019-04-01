@@ -15,6 +15,7 @@ interface Props {
   emptyState: JSX.Element
   onDeleteVariable: (variable: Variable) => void
   onUpdateVariable: (variable: Variable) => void
+  onFilterChange: (searchTerm: string) => void
 }
 
 interface State {
@@ -38,6 +39,7 @@ class VariableList extends PureComponent<Props, State> {
       variables,
       onDeleteVariable,
       onUpdateVariable,
+      onFilterChange,
     } = this.props
 
     return (
@@ -55,6 +57,7 @@ class VariableList extends PureComponent<Props, State> {
                 onDeleteVariable={onDeleteVariable}
                 onUpdateVariableName={onUpdateVariable}
                 onEditVariable={this.handleStartEdit}
+                onFilterChange={onFilterChange}
               />
             ))}
           </IndexList.Body>

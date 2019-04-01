@@ -104,6 +104,7 @@ class Variables extends PureComponent<Props, State> {
               emptyState={this.emptyState}
               onDeleteVariable={this.handleDeleteVariable}
               onUpdateVariable={this.handleUpdateVariable}
+              onFilterChange={this.handleFilterUpdate}
             />
           )}
         </FilterList>
@@ -153,6 +154,10 @@ class Variables extends PureComponent<Props, State> {
   }
 
   private handleFilterBlur() {}
+
+  private handleFilterUpdate = (searchTerm: string) => {
+    this.setState({searchTerm})
+  }
 
   private handleOpenImportOverlay = (): void => {
     const {router, org} = this.props

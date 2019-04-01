@@ -78,7 +78,7 @@ export default class UpdateVariableOverlay extends PureComponent<Props, State> {
                 onClick={onCloseOverlay}
               />
               <Button
-                text="Submit"
+                text="Save"
                 type={ButtonType.Submit}
                 color={ComponentColor.Primary}
                 status={
