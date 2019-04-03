@@ -7,13 +7,12 @@ import (
 
 	platform "github.com/influxdata/influxdb"
 	"github.com/influxdata/influxdb/models"
-	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxdb/storage"
 	"github.com/influxdata/influxdb/storage/reads"
 	"github.com/influxdata/influxdb/storage/reads/datatypes"
 	"github.com/influxdata/influxdb/tsdb"
 	"github.com/influxdata/influxql"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -51,12 +50,7 @@ func newIndexSeriesCursor(ctx context.Context, src *readSource, req *datatypes.R
 		defer span.Finish()
 	}
 
-	opt := query.IteratorOptions{
-		Aux:        []influxql.VarRef{{Val: "key"}},
-		Authorizer: query.OpenAuthorizer,
-		Ascending:  true,
-		Ordered:    true,
-	}
+	var cond influxql.Expr
 	p := &indexSeriesCursor{row: reads.SeriesRow{Query: tsdb.CursorIterators{queries}}}
 
 	if root := req.Predicate.GetRoot(); root != nil {
@@ -66,11 +60,11 @@ func newIndexSeriesCursor(ctx context.Context, src *readSource, req *datatypes.R
 
 		p.hasValueExpr = reads.HasFieldValueKey(p.cond)
 		if !p.hasValueExpr {
-			opt.Condition = p.cond
+			cond = p.cond
 		} else {
-			opt.Condition = influxql.Reduce(reads.RewriteExprRemoveFieldValue(influxql.CloneExpr(p.cond)), nil)
-			if reads.IsTrueBooleanLiteral(opt.Condition) {
-				opt.Condition = nil
+			cond = influxql.Reduce(reads.RewriteExprRemoveFieldValue(influxql.CloneExpr(p.cond)), nil)
+			if reads.IsTrueBooleanLiteral(cond) {
+				cond = nil
 			}
 		}
 	}
@@ -78,7 +72,10 @@ func newIndexSeriesCursor(ctx context.Context, src *readSource, req *datatypes.R
 	scr := storage.SeriesCursorRequest{
 		Name: tsdb.EncodeName(platform.ID(src.OrganizationID), platform.ID(src.BucketID)),
 	}
-	p.sqry, err = engine.CreateSeriesCursor(ctx, scr, opt.Condition)
+	if req.Group != datatypes.GroupAll {
+		scr.UnsortedKeys = true
+	}
+	p.sqry, err = engine.CreateSeriesCursor(ctx, scr, cond)
 	if err != nil {
 		p.Close()
 		return nil, err

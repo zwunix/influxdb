@@ -29,7 +29,7 @@ func AddControllerConfigDependencies(
 	bucketLookupSvc := query.FromBucketService(bucketSvc)
 	orgLookupSvc := query.FromOrganizationService(orgSvc)
 	err := influxdb.InjectFromDependencies(cc.ExecutorDependencies, influxdb.Dependencies{
-		Reader:             reads.NewReader(newStore(engine)),
+		Reader:             reads.NewReader(NewStore(engine)),
 		BucketLookup:       bucketLookupSvc,
 		OrganizationLookup: orgLookupSvc,
 	})

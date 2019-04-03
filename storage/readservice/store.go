@@ -14,15 +14,15 @@ import (
 	"github.com/influxdata/influxdb/storage/reads/datatypes"
 )
 
-type store struct {
+type Store struct {
 	engine *storage.Engine
 }
 
-func newStore(engine *storage.Engine) *store {
-	return &store{engine: engine}
+func NewStore(engine *storage.Engine) *Store {
+	return &Store{engine: engine}
 }
 
-func (s *store) Read(ctx context.Context, req *datatypes.ReadRequest) (reads.ResultSet, error) {
+func (s *Store) Read(ctx context.Context, req *datatypes.ReadRequest) (reads.ResultSet, error) {
 	if len(req.GroupKeys) > 0 {
 		panic("Read: len(Grouping) > 0")
 	}
@@ -64,7 +64,7 @@ func (s *store) Read(ctx context.Context, req *datatypes.ReadRequest) (reads.Res
 	return reads.NewResultSet(ctx, req, cur), nil
 }
 
-func (s *store) GroupRead(ctx context.Context, req *datatypes.ReadRequest) (reads.GroupResultSet, error) {
+func (s *Store) GroupRead(ctx context.Context, req *datatypes.ReadRequest) (reads.GroupResultSet, error) {
 	if req.SeriesLimit > 0 || req.SeriesOffset > 0 {
 		return nil, errors.New("groupRead: SeriesLimit and SeriesOffset not supported when Grouping")
 	}
@@ -113,7 +113,7 @@ func (r *readSource) Reset()                  { *r = readSource{} }
 func (r *readSource) String() string          { return "readSource{}" }
 func (r *readSource) ProtoMessage()           {}
 
-func (s *store) GetSource(rs influxdb.ReadSpec) (proto.Message, error) {
+func (s *Store) GetSource(rs influxdb.ReadSpec) (proto.Message, error) {
 	return &readSource{
 		BucketID:       uint64(rs.BucketID),
 		OrganizationID: uint64(rs.OrganizationID),

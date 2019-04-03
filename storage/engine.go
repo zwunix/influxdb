@@ -18,7 +18,6 @@ import (
 	"github.com/influxdata/influxdb/tsdb/tsi1"
 	"github.com/influxdata/influxdb/tsdb/tsm1"
 	"github.com/influxdata/influxdb/tsdb/value"
-	"github.com/influxdata/influxql"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -325,17 +324,6 @@ func (e *Engine) Close() error {
 	ch.Close(e.index)
 	ch.Close(e.sfile)
 	return ch.Done()
-}
-
-// CreateSeriesCursor creates a SeriesCursor for usage with the read service.
-func (e *Engine) CreateSeriesCursor(ctx context.Context, req SeriesCursorRequest, cond influxql.Expr) (SeriesCursor, error) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if e.closing == nil {
-		return nil, ErrEngineClosed
-	}
-
-	return newSeriesCursor(req, e.index, e.sfile, cond)
 }
 
 // CreateCursorIterator creates a CursorIterator for usage with the read service.

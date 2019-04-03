@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 
 	platform "github.com/influxdata/influxdb"
@@ -21,8 +22,9 @@ var authorizationCmd = &cobra.Command{
 
 // AuthorizationCreateFlags are command line args used when creating a authorization
 type AuthorizationCreateFlags struct {
-	user string
-	org  string
+	user  string
+	org   string
+	token string
 
 	writeUserPermission bool
 	readUserPermission  bool
@@ -59,6 +61,7 @@ func init() {
 	authorizationCreateCmd.MarkFlagRequired("org")
 
 	authorizationCreateCmd.Flags().StringVarP(&authorizationCreateFlags.user, "user", "u", "", "The user name")
+	authorizationCreateCmd.Flags().StringVarP(&authorizationCreateFlags.token, "token", "t", "", "The value for the token")
 
 	authorizationCreateCmd.Flags().BoolVarP(&authorizationCreateFlags.writeUserPermission, "write-user", "", false, "Grants the permission to perform mutative actions against organization users")
 	authorizationCreateCmd.Flags().BoolVarP(&authorizationCreateFlags.readUserPermission, "read-user", "", false, "Grants the permission to perform read actions against organization users")
@@ -92,10 +95,29 @@ func authorizationCreateF(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
+
 	orgFilter := platform.OrganizationFilter{Name: &authorizationCreateFlags.org}
 	o, err := orgSvc.FindOrganization(ctx, orgFilter)
 	if err != nil {
 		return err
+	}
+
+	if cl, ok := orgSvc.(io.Closer); ok {
+		cl.Close()
+	}
+
+	usrSvc, err := newUserService(flags)
+	if err != nil {
+		return err
+	}
+
+	userFilter := platform.UserFilter{Name: &authorizationCreateFlags.user}
+	u, err := usrSvc.FindUser(ctx, userFilter)
+	if err != nil {
+		return err
+	}
+	if cl, ok := usrSvc.(io.Closer); ok {
+		cl.Close()
 	}
 
 	if authorizationCreateFlags.writeUserPermission {
@@ -224,6 +246,8 @@ func authorizationCreateF(cmd *cobra.Command, args []string) error {
 	authorization := &platform.Authorization{
 		Permissions: permissions,
 		OrgID:       o.ID,
+		UserID:      u.ID,
+		Token:       authorizationCreateFlags.token,
 	}
 
 	s, err := newAuthorizationService(flags)

@@ -25,7 +25,8 @@ type SeriesCursor interface {
 
 type SeriesCursorRequest struct {
 	// Name contains the tsdb encoded org and bucket ID
-	Name [influxdb.IDLength]byte
+	Name         [influxdb.IDLength]byte
+	UnsortedKeys bool
 }
 
 // seriesCursor is an implementation of SeriesCursor over an tsi1.Index.
@@ -40,6 +41,7 @@ type seriesCursor struct {
 	row      SeriesCursorRow
 	cond     influxql.Expr
 	init     bool
+	unsorted bool
 }
 
 type SeriesCursorRow struct {
@@ -82,6 +84,7 @@ func newSeriesCursor(req SeriesCursorRequest, index *tsi1.Index, sfile *tsdb.Ser
 		sfile:    sfile,
 		sfileref: sfileref,
 		name:     req.Name,
+		unsorted: req.UnsortedKeys,
 		cond:     cond,
 	}, nil
 }
@@ -103,7 +106,7 @@ func (cur *seriesCursor) Next() (*SeriesCursorRow, error) {
 	}
 
 	if cur.ofs < len(cur.keys) {
-		cur.row.Name, cur.row.Tags = tsdb.ParseSeriesKey(cur.keys[cur.ofs])
+		cur.row.Name, cur.row.Tags = tsdb.ParseSeriesKeyInto(cur.keys[cur.ofs], cur.row.Tags)
 		if !bytes.HasPrefix(cur.row.Name, cur.name[:influxdb.OrgIDLength]) {
 			return nil, errUnexpectedOrg
 		}
@@ -138,8 +141,10 @@ func (cur *seriesCursor) readSeriesKeys() error {
 		cur.keys = append(cur.keys, key)
 	}
 
-	// Sort keys.
-	sort.Sort(seriesKeys(cur.keys))
+	if !cur.unsorted {
+		sort.Sort(seriesKeys(cur.keys))
+	}
+
 	return nil
 }
 
