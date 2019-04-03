@@ -15,6 +15,7 @@ interface Props {
   showOrgDropdown?: boolean
   isFullPage?: boolean
   filterComponent: () => JSX.Element
+  orgName: string
 }
 
 export default class TasksHeader extends PureComponent<Props> {
@@ -81,10 +82,10 @@ export default class TasksHeader extends PureComponent<Props> {
   }
 
   private get pageTitle() {
-    const {showOrgDropdown} = this.props
+    const {showOrgDropdown, orgName} = this.props
 
     if (showOrgDropdown) {
-      return 'Tasks'
+      return `${orgName} Tasks`
     }
     return ''
   }

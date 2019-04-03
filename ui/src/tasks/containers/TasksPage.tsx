@@ -108,13 +108,14 @@ class TasksPage extends PureComponent<Props, State> {
 
     return (
       <>
-        <Page titleTag="Tasks">
+        <Page titleTag={`${this.orgName} Tasks`}>
           <TasksHeader
             onCreateTask={this.handleCreateTask}
             setShowInactive={setShowInactive}
             showInactive={showInactive}
             filterComponent={() => this.search}
             onImportTask={this.summonOverlay}
+            orgName={this.orgName}
           />
           <Page.Contents fullWidth={false} scrollable={true}>
             <div className="col-xs-12">
@@ -152,6 +153,17 @@ class TasksPage extends PureComponent<Props, State> {
         {this.props.children}
       </>
     )
+  }
+
+  private get orgName(): string {
+    const {
+      params: {orgID},
+      orgs,
+    } = this.props
+
+    return orgs.find(org => {
+      return org.id === orgID
+    }).name
   }
 
   public componentDidMount() {
