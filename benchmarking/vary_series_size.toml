@@ -1,0 +1,62 @@
+title = "CLI schema"
+
+[[measurements]]
+name   = "1t10v100p"
+sample = 1.0
+tags = [
+    { name = "tag0", source = { type = "sequence", format = "value%s", start = 0, count = 10 } },
+]
+fields = [
+    { name = "v0", count = 100, source = 1.0 },
+]
+
+[[measurements]]
+name   = "1t10v1000p"
+sample = 1.0
+tags = [
+    { name = "tag0", source = { type = "sequence", format = "value%s", start = 0, count = 10 } },
+]
+fields = [
+    { name = "v0", count = 1000, source = 1.0 },
+]
+
+[[measurements]]
+name   = "1t10v10000p"
+sample = 1.0
+tags = [
+    { name = "tag0", source = { type = "sequence", format = "value%s", start = 0, count = 10 } },
+]
+fields = [
+    { name = "v0", count = 10000, source = 1.0 },
+]
+
+[[measurements]]
+name   = "1t10v100000p"
+sample = 1.0
+tags = [
+    { name = "tag0", source = { type = "sequence", format = "value%s", start = 0, count = 10 } },
+]
+fields = [
+    { name = "v0", count = 100000, source = 1.0 },
+]
+
+[[measurements]]
+name   = "1t10v1000000p"
+sample = 1.0
+tags = [
+    { name = "tag0", source = { type = "sequence", format = "value%s", start = 0, count = 10 } },
+]
+fields = [
+    { name = "v0", count = 1000000, source = 1.0 },
+]
+
+[[measurements]]
+name   = "1t10v10000000p"
+sample = 1.0
+tags = [
+    { name = "tag0", source = { type = "sequence", format = "value%s", start = 0, count = 10 } },
+]
+fields = [
+    { name = "v0", count = 10000000, source = 1.0 },
+]
+
