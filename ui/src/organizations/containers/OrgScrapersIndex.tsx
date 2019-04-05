@@ -16,6 +16,9 @@ import Scrapers from 'src/organizations/components/Scrapers'
 // APIs
 import {client} from 'src/utils/api'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 // Decorators
 import {ErrorHandling} from 'src/shared/decorators/errors'
 
@@ -59,7 +62,10 @@ class OrgScrapersIndex extends Component<Props> {
     const {org, notify} = this.props
 
     return (
-      <Page titleTag={org.name}>
+      <Page
+        titleTag={`Scrapers | ${org.name}${PAGE_TITLE_SUFFIX}`}
+        loadingTitleTag={`Scrapers | ${org.name}${PAGE_TITLE_SUFFIX}`}
+      >
         <OrgHeader />
         <Page.Contents fullWidth={false} scrollable={true}>
           <div className="col-xs-12">

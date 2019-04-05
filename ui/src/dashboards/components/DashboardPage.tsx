@@ -27,6 +27,7 @@ import {GlobalAutoRefresher} from 'src/utils/AutoRefresher'
 // Constants
 import {DASHBOARD_LAYOUT_ROW_HEIGHT} from 'src/shared/constants'
 import {DEFAULT_TIME_RANGE} from 'src/shared/constants/timeRanges'
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
 
 // Types
 import {Links, Dashboard, Cell, View, TimeRange, AppState} from 'src/types'
@@ -153,7 +154,7 @@ class DashboardPage extends Component<Props, State> {
     } = this.props
 
     return (
-      <Page titleTag={this.pageTitle}>
+      <Page loadingTitleTag={`${this.pageTitle}${PAGE_TITLE_SUFFIX}`}>
         <HoverTimeProvider>
           <DashboardHeader
             dashboard={dashboard}

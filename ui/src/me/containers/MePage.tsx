@@ -33,7 +33,7 @@ export class MePage extends PureComponent<StateProps> {
     return (
       <Page
         className="user-page"
-        loadingTitleTag={`My Account${PAGE_TITLE_SUFFIX}`}
+        loadingTitleTag={`${me.name}${PAGE_TITLE_SUFFIX}`}
       >
         <Header userName={me.name} />
         <Page.Contents fullWidth={false} scrollable={true}>

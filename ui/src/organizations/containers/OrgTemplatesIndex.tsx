@@ -15,6 +15,9 @@ import OrgTemplatesPage from 'src/organizations/components/OrgTemplatesPage'
 //Actions
 import {setTemplatesStatus as setTemplatesStatusAction} from 'src/templates/actions/index'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 // Types
 import {Organization, TemplateSummary} from '@influxdata/influx'
 import {AppState} from 'src/types'
@@ -48,7 +51,10 @@ class OrgTemplatesIndex extends Component<Props> {
     const {org, templates} = this.props
     return (
       <>
-        <Page titleTag={org.name}>
+        <Page
+          loadingTitleTag={`Templates | ${org.name}${PAGE_TITLE_SUFFIX}`}
+          titleTag={`Templates | ${org.name}${PAGE_TITLE_SUFFIX}`}
+        >
           <OrgHeader />
           <Page.Contents fullWidth={false} scrollable={true}>
             <div className="col-xs-12">

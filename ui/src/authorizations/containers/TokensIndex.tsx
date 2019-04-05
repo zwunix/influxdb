@@ -14,6 +14,9 @@ import GetResources, {
 } from 'src/configuration/components/GetResources'
 import TokensTab from 'src/authorizations/components/TokensTab'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 // Types
 import {Organization} from '@influxdata/influx'
 import {AppState} from 'src/types'
@@ -28,7 +31,10 @@ class TokensIndex extends Component<StateProps> {
     const {org} = this.props
 
     return (
-      <Page titleTag={org.name}>
+      <Page
+        loadingTitleTag={`Tokens | ${org.name}${PAGE_TITLE_SUFFIX}`}
+        titleTag={`Tokens | ${org.name}${PAGE_TITLE_SUFFIX}`}
+      >
         <OrgHeader />
         <Page.Contents fullWidth={false} scrollable={true}>
           <div className="col-xs-12">

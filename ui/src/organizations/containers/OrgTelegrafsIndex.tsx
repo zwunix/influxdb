@@ -20,6 +20,9 @@ import * as NotificationsActions from 'src/types/actions/notifications'
 import * as notifyActions from 'src/shared/actions/notifications'
 import {getOrgTelegrafs} from 'src/telegrafs/actions'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 // Types
 import {Bucket, Organization, ITelegraf as Telegraf} from '@influxdata/influx'
 import {client} from 'src/utils/api'
@@ -77,7 +80,10 @@ class OrgTelegrafsIndex extends Component<Props, State> {
     const {loading: loadingTelegrafs} = this.state
 
     return (
-      <Page titleTag={org.name}>
+      <Page
+        loadingTitleTag={`Telegraf | ${org.name}${PAGE_TITLE_SUFFIX}`}
+        titleTag={`Telegraf | ${org.name}${PAGE_TITLE_SUFFIX}`}
+      >
         <OrgHeader />
         <Page.Contents fullWidth={false} scrollable={true}>
           <div className="col-xs-12">

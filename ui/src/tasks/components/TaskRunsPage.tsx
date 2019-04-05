@@ -14,6 +14,9 @@ import {RemoteDataState} from 'src/types'
 import {Run as APIRun, Task} from '@influxdata/influx'
 import {SpinnerContainer, TechnoSpinner, Button} from '@influxdata/clockface'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 // Actions
 import {getRuns, runTask} from 'src/tasks/actions'
 import {IconFont} from 'src/clockface'
@@ -48,7 +51,7 @@ class TaskRunsPage extends PureComponent<Props> {
         loading={this.props.runStatus}
         spinnerComponent={<TechnoSpinner />}
       >
-        <Page titleTag="Runs">
+        <Page titleTag={`Task Runs${PAGE_TITLE_SUFFIX}`}>
           <Page.Header fullWidth={false}>
             <Page.Header.Left>
               <PageTitleWithOrg title={this.title} />

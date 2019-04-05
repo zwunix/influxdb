@@ -26,6 +26,7 @@ import GetResources, {
 } from 'src/configuration/components/GetResources'
 
 // Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
 import {DEFAULT_DASHBOARD_NAME} from 'src/dashboards/constants/index'
 import {dashboardCreateFailed} from 'src/shared/copy/notifications'
 
@@ -83,7 +84,7 @@ class DashboardIndex extends PureComponent<Props, State> {
 
     return (
       <>
-        <Page titleTag="Dashboards">
+        <Page loadingTitleTag={`Dashboards${PAGE_TITLE_SUFFIX}`}>
           <Page.Header fullWidth={false}>
             <Page.Header.Left>
               <PageTitleWithOrg title="Dashboards" />

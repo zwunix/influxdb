@@ -19,6 +19,9 @@ import {
   cancel,
 } from 'src/tasks/actions'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 // Utils
 import {
   taskOptionsToFluxScript,
@@ -67,7 +70,7 @@ class TaskPage extends PureComponent<
     const {newScript, taskOptions} = this.props
 
     return (
-      <Page titleTag="Create Task">
+      <Page loadingTitleTag={`Create Task${PAGE_TITLE_SUFFIX}`}>
         <TaskHeader
           title="Create Task"
           canSubmit={this.isFormValid}

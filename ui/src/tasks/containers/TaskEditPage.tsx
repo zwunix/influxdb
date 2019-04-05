@@ -10,6 +10,9 @@ import TaskHeader from 'src/tasks/components/TaskHeader'
 import {Page} from '@influxdata/clockface'
 import FluxEditor from 'src/shared/components/FluxEditor'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 // Actions
 import {
   updateScript,
@@ -76,7 +79,7 @@ class TaskEditPage extends PureComponent<
     const {currentScript, taskOptions} = this.props
 
     return (
-      <Page titleTag={`Edit ${taskOptions.name}`}>
+      <Page titleTag={`Edit ${taskOptions.name}${PAGE_TITLE_SUFFIX}`}>
         <TaskHeader
           title="Update Task"
           canSubmit={this.isFormValid}

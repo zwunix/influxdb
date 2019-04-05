@@ -15,6 +15,9 @@ import Variables from 'src/configuration/components/Variables'
 import Scrapers from 'src/configuration/components/Scrapers'
 import PageTitleWithOrg from 'src/shared/components/PageTitleWithOrg'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 // Decorators
 import {ErrorHandling} from 'src/shared/decorators/errors'
 import CloudExclude from 'src/shared/components/cloud/CloudExclude'
@@ -34,7 +37,7 @@ class ConfigurationPage extends Component<Props> {
     } = this.props
 
     return (
-      <Page titleTag="Configuration">
+      <Page titleTag={`Configuration${PAGE_TITLE_SUFFIX}`}>
         <Page.Header fullWidth={false}>
           <Page.Header.Left>
             <PageTitleWithOrg title="Configuration" />

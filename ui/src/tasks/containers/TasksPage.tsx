@@ -15,6 +15,9 @@ import GetResources, {
   ResourceTypes,
 } from 'src/configuration/components/GetResources'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 // Actions
 import {
   updateTaskStatus,
@@ -97,7 +100,10 @@ class TasksPage extends PureComponent<Props, State> {
 
     return (
       <>
-        <Page titleTag="Tasks">
+        <Page
+          titleTag={`Tasks${PAGE_TITLE_SUFFIX}`}
+          loadingTitleTag={`Tasks${PAGE_TITLE_SUFFIX}`}
+        >
           <TasksHeader
             onCreateTask={this.handleCreateTask}
             setShowInactive={setShowInactive}

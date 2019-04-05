@@ -17,6 +17,9 @@ import Members from 'src/organizations/components/Members'
 import * as NotificationsActions from 'src/types/actions/notifications'
 import * as notifyActions from 'src/shared/actions/notifications'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 // APIs
 import {client} from 'src/utils/api'
 
@@ -60,7 +63,10 @@ class OrgMembersIndex extends Component<Props> {
     const {org, notify} = this.props
 
     return (
-      <Page titleTag={org.name}>
+      <Page
+        loadingTitleTag={`Members | ${org.name}${PAGE_TITLE_SUFFIX}`}
+        titleTag={`Members | ${org.name}${PAGE_TITLE_SUFFIX}`}
+      >
         <OrgHeader />
         <Page.Contents fullWidth={false} scrollable={true}>
           <div className="col-xs-12">
