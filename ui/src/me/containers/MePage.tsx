@@ -4,7 +4,7 @@ import {connect} from 'react-redux'
 
 // Components
 import {Grid, Columns} from 'src/clockface'
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 import Resources from 'src/me/components/Resources'
 import Header from 'src/me/components/UserPageHeader'
 import Docs from 'src/me/components/Docs'
@@ -12,6 +12,9 @@ import GettingStarted from 'src/me/components/GettingStarted'
 
 // Types
 import {AppState} from 'src/types'
+
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
 
 // Decorators
 import {ErrorHandling} from 'src/shared/decorators/errors'
@@ -28,7 +31,10 @@ export class MePage extends PureComponent<StateProps> {
     const {me} = this.props
 
     return (
-      <Page className="user-page" titleTag="My Account">
+      <Page
+        className="user-page"
+        loadingTitleTag={`My Account${PAGE_TITLE_SUFFIX}`}
+      >
         <Header userName={me.name} />
         <Page.Contents fullWidth={false} scrollable={true}>
           <div className="col-xs-12">
