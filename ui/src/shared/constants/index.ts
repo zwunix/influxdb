@@ -1,5 +1,7 @@
 import _ from 'lodash'
 
+export const PAGE_TITLE_SUFFIX = ' | InfluxDB 2.0'
+
 export const DEFAULT_TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss'
 
 export const DEFAULT_DURATION_MS = 1000
