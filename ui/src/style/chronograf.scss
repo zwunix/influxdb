@@ -110,3 +110,9 @@
 
 // External
 @import '../../node_modules/@influxdata/react-custom-scrollbars/dist/styles.css';
+
+// Tech Debt
+.page-contents:not(.dapper-scrollbars) > .page-contents--padding {
+   height: 100%;
+}
+// This should be moved to the clockface library
