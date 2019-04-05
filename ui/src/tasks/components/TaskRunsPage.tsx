@@ -4,7 +4,7 @@ import _ from 'lodash'
 import {connect} from 'react-redux'
 
 // Components
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 import TaskRunsList from 'src/tasks/components/TaskRunsList'
 import PageTitleWithOrg from 'src/shared/components/PageTitleWithOrg'
 

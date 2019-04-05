@@ -8,7 +8,7 @@ import {ErrorHandling} from 'src/shared/decorators/errors'
 import OrganizationNavigation from 'src/organizations/components/OrganizationNavigation'
 import OrgHeader from 'src/organizations/containers/OrgHeader'
 import {Tabs} from 'src/clockface'
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 import TabbedPageSection from 'src/shared/components/tabbed_page/TabbedPageSection'
 import Variables from 'src/organizations/components/Variables'
 

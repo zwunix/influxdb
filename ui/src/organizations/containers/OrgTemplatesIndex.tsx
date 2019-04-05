@@ -5,7 +5,7 @@ import {connect} from 'react-redux'
 // Components
 import {ErrorHandling} from 'src/shared/decorators/errors'
 import {Tabs} from 'src/clockface'
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 import OrganizationNavigation from 'src/organizations/components/OrganizationNavigation'
 import OrgHeader from 'src/organizations/containers/OrgHeader'
 import TabbedPageSection from 'src/shared/components/tabbed_page/TabbedPageSection'

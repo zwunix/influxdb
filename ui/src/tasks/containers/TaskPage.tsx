@@ -8,7 +8,7 @@ import {connect} from 'react-redux'
 import TaskForm from 'src/tasks/components/TaskForm'
 import TaskHeader from 'src/tasks/components/TaskHeader'
 import FluxEditor from 'src/shared/components/FluxEditor'
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 
 // Actions
 import {

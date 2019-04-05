@@ -2,7 +2,7 @@
 import React, {Component} from 'react'
 
 // Components
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 import AutoRefreshDropdown from 'src/shared/components/dropdown_auto_refresh/AutoRefreshDropdown'
 import TimeRangeDropdown from 'src/shared/components/TimeRangeDropdown'
 import GraphTips from 'src/shared/components/graph_tips/GraphTips'
@@ -68,7 +68,7 @@ export default class DashboardHeader extends Component<Props> {
     } = this.props
 
     return (
-      <Page.Header fullWidth={true} inPresentationMode={isHidden}>
+      <Page.Header fullWidth={true} hide={isHidden}>
         <Page.Header.Left>
           <RenamablePageTitle
             maxLength={DASHBOARD_NAME_MAX_LENGTH}

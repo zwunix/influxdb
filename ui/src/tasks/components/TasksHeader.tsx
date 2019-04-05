@@ -1,6 +1,6 @@
 // Libraries
 import React, {PureComponent} from 'react'
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 
 // Components
 import {

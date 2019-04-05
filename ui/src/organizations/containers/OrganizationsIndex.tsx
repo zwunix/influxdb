@@ -5,7 +5,7 @@ import {connect} from 'react-redux'
 import _ from 'lodash'
 
 // Components
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 import OrganizationsIndexContents from 'src/organizations/components/OrganizationsIndexContents'
 import SearchWidget from 'src/shared/components/search_widget/SearchWidget'
 import {Button, IconFont, ComponentColor} from '@influxdata/clockface'

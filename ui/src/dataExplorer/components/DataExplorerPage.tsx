@@ -3,15 +3,18 @@ import React, {SFC} from 'react'
 
 // Components
 import DataExplorer from 'src/dataExplorer/components/DataExplorer'
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 import SaveAsButton from 'src/dataExplorer/components/SaveAsButton'
 import VisOptionsButton from 'src/timeMachine/components/VisOptionsButton'
 import ViewTypeDropdown from 'src/timeMachine/components/view_options/ViewTypeDropdown'
 import PageTitleWithOrg from 'src/shared/components/PageTitleWithOrg'
 
+// Constants
+import {PAGE_TITLE_SUFFIX} from 'src/shared/constants'
+
 const DataExplorerPage: SFC = ({children}) => {
   return (
-    <Page titleTag="Data Explorer">
+    <Page loadingTitleTag={`Data Explorer${PAGE_TITLE_SUFFIX}`}>
       {children}
       <Page.Header fullWidth={true}>
         <Page.Header.Left>

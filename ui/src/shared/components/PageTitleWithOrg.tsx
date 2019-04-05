@@ -4,7 +4,7 @@ import {connect} from 'react-redux'
 import {startCase} from 'lodash'
 
 // Components
-import PageTitle from 'src/pageLayout/components/PageTitle'
+import {Page} from '@influxdata/clockface'
 
 // Types
 import {AppState} from 'src/types'
@@ -29,7 +29,10 @@ class PageTitleWithOrg extends PureComponent<Props> {
     const {orgName, title, altText} = this.props
 
     return (
-      <PageTitle title={`${startCase(orgName)} / ${title}`} altText={altText} />
+      <Page.Title
+        title={`${startCase(orgName)} / ${title}`}
+        altText={altText}
+      />
     )
   }
 }

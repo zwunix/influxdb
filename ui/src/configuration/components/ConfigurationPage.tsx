@@ -3,7 +3,7 @@ import React, {Component} from 'react'
 import {withRouter, WithRouterProps} from 'react-router'
 
 // Components
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 import GetResources, {
   ResourceTypes,
 } from 'src/configuration/components/GetResources'

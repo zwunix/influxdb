@@ -2,7 +2,7 @@
 import React, {PureComponent} from 'react'
 
 // Components
-import {Page} from 'src/pageLayout'
+import {Page} from '@influxdata/clockface'
 import PageTitleWithOrg from 'src/shared/components/PageTitleWithOrg'
 
 // Components
