@@ -19,6 +19,8 @@ interface Props {
   children: JSX.Element
   visible: boolean
   className?: string
+  noScrollX?: boolean
+  noScrollY?: boolean
 }
 
 interface State {
@@ -58,6 +60,8 @@ class Overlay extends Component<Props, State> {
   }
 
   public render() {
+    const {noScrollX, noScrollY} = this.props
+
     return (
       <DapperScrollbars
         className={this.overlayClass}
@@ -65,6 +69,8 @@ class Overlay extends Component<Props, State> {
         thumbStopColor="#C9D0FF"
         autoHide={false}
         autoSize={false}
+        noScrollX={noScrollX}
+        noScrollY={noScrollY}
       >
         {this.childContainer}
         <div className="overlay--mask" />

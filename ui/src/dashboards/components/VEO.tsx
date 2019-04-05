@@ -66,7 +66,7 @@ class VEO extends PureComponent<Props, State> {
     const {params} = this.props
 
     return (
-      <Overlay visible={true} className="veo-overlay">
+      <Overlay visible={true} className="veo-overlay" noScrollX={true}>
         <div className="veo">
           <SpinnerContainer
             spinnerComponent={<TechnoSpinner />}
