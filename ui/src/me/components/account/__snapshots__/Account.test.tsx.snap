@@ -1,25 +1,25 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Account rendering renders! 1`] = `
-<Page
+<t
   titleTag="Account"
 >
-  <PageHeader
+  <t
     fullWidth={false}
-    inPresentationMode={false}
+    hide={false}
   >
-    <PageHeaderLeft
+    <t
       offsetPixels={0}
     >
       <Connect(PageTitleWithOrg)
         title="Account"
       />
-    </PageHeaderLeft>
-    <PageHeaderRight
+    </t>
+    <t
       offsetPixels={0}
     />
-  </PageHeader>
-  <PageContents
+  </t>
+  <t
     fullWidth={false}
     scrollable={true}
   >
@@ -36,6 +36,6 @@ exports[`Account rendering renders! 1`] = `
         <Connect(Settings) />
       </TabbedPageSection>
     </withRouter(TabbedPage)>
-  </PageContents>
-</Page>
+  </t>
+</t>
 `;
