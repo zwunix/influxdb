@@ -46,12 +46,12 @@ func TestNames(t *testing.T) {
 }
 
 func TestExplodePoints(t *testing.T) {
-	points, err := models.ParsePointsString(`
+	points, err := models.ParsePointsStringV1(`
 		cpu,t1=a,t2=q f1=5,f2="f" 9
 		mem,t1=b,t2=w f1=6,f2="g",f3=true 8
 		cpu,t3=e,t1=c f3=7,f4="h" 7
 		mem,t1=d,t2=r,t4=g f1=8,f2="i" 6
-	`)
+	`, ``)
 	if err != nil {
 		t.Fatal(err)
 	}
