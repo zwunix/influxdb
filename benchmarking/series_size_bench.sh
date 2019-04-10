@@ -1,24 +1,11 @@
-STEPS=$1
-shift
-TOKEN=$1
-shift
-query=$*
+TOKEN=5CJjFZBVRme8YRCEsSbonzgmz-Y50HsggB8QVPrUI9_zno_Zz9YzbZynZ94BWI6Dkz2CC5p63agcOgLRQtQLlw==
 
-make > /dev/null && echo "make successful"
-NPOINTS=1
-for i in {0..6}
+for i in {2..7}
 do
-let NPOINTS=NPOINTS*10
-./bin/darwin/influxd generate simple --t 10 --p $NPOINTS --clean all --bucket my-bucket --org my-org
+    measurement="\"1t10v$((10**i))p\""
 
-./bin/darwin/influxd >/dev/null &
-INFLUX_PID=$!
-sleep 5
+ hyperfine -r 10 --shell bash -u millisecond --export-csv 1TagNValues.csv "curl http://localhost:8086/api/v2/query?org=my-org -XPOST -sS -H 'Authorization: Token $TOKEN' -H 'accept:application/csv' -H 'content-type:application/vnd.flux' -d 'from(bucket:\"db\") |> range(start:-30d)|> filter(fn: (r) => r._m == $measurement)'" "curl http://localhost:8086/api/v2/query?org=my-org -XPOST -sS -H 'Authorization: Token $TOKEN' -H 'accept:application/csv' -H 'content-type:application/vnd.flux' -d 'from(bucket:\"db\") |> range(start:-30d)|> filter(fn: (r) => r._m == $measurement)|> group(columns:[\"tag0\"])'" "curl http://localhost:8086/api/v2/query?org=my-org -XPOST -sS -H 'Authorization: Token $TOKEN' -H 'accept:application/csv' -H 'content-type:application/vnd.flux' -d 'from(bucket:\"db\") |> range(start:-30d)|> filter(fn: (r) => r._m == $measurement)|> map(fn: (r) => r._value * 1000.0) '"  "curl http://localhost:8086/api/v2/query?org=my-org -XPOST -sS -H 'Authorization: Token $TOKEN' -H 'accept:application/csv' -H 'content-type:application/vnd.flux' -d 'from(bucket:\"db\") |> range(start:-30d)|> filter(fn: (r) => r._m == $measurement) |> window(every:5m) |> count()'"
+    
+    hyperfine -r 10 --shell bash -u millisecond --export-csv 1TagNPointsInfluxQL.csv "curl -G 'http://localhost:8086/query?db=db' --data-urlencode 'q=SELECT * FROM $measurement'" "curl -G 'http://localhost:8086/query?db=db' --data-urlencode 'q=SELECT * FROM $measurement group by \"tag0\"'" "curl -G 'http://localhost:8086/query?db=db' --data-urlencode 'q=SELECT (\"v0\" * 1000) FROM $measurement'" "curl -G 'http://localhost:8086/query?db=db' --data-urlencode 'q=SELECT count(*) FROM $measurement group by time(5m)'"  "curl -G 'http://localhost:8086/query?db=db' --data-urlencode 'q=SHOW TAG KEYS FROM $measurement'" "curl -G 'http://localhost:8086/query?db=db' --data-urlencode 'q=SHOW TAG VALUES FROM $measurement with key =~ /tag.*/'"
 
-#$HOME/.local/bin/bench  -v 2 "curl http://localhost:9999/api/v2/query?org=my-org -XPOST -sS -H 'Authorization: Token $TOKEN' -H 'accept:application/csv' -H 'content-type:application/vnd.flux' -d '$query'" --output example.html --csv "bench_$NPOINTS.csv"
-
-hyperfine -r 10 --shell bash -u millisecond --export-markdown series_size.md "curl http://localhost:9999/api/v2/query?org=my-org -XPOST -sS -H 'Authorization: Token $TOKEN' -H 'accept:application/csv' -H 'content-type:application/vnd.flux' -d '$query'" 
-
-
-kill $INFLUX_PID
 done
