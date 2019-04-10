@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
 	platform "github.com/influxdata/influxdb"
@@ -51,6 +52,8 @@ type WriteHandler struct {
 	OrganizationService platform.OrganizationService
 
 	PointsWriter storage.PointsWriter
+
+	TrackUsage func(context.Context, platform.ID, int)
 }
 
 const (
@@ -68,10 +71,44 @@ func NewWriteHandler(b *WriteBackend) *WriteHandler {
 		PointsWriter:        b.PointsWriter,
 		BucketService:       b.BucketService,
 		OrganizationService: b.OrganizationService,
+		TrackUsage:          newWriteUsageTracker(),
 	}
 
 	h.HandlerFunc("POST", writePath, h.handleWrite)
 	return h
+}
+
+func newWriteUsageTracker() func(context.Context, platform.ID, int) {
+	const namespace = "usage"
+
+	requestCount := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: "write",
+		Name:      "request_count",
+		Help:      "Total number of write requests",
+	}, []string{"orgID"})
+
+	requestBytes := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "request_bytes",
+		Help:      "Count of bytes written",
+	}, []string{"orgID"})
+
+	return func(ctx context.Context, orgID platform.ID, n int) {
+		requestCount.With(prometheus.Labels{
+			"orgID": orgID.String(),
+		}).Inc()
+
+		requestBytes.With(prometheus.Labels{
+			"orgID": orgID.String(),
+		}).Add(float64(n))
+	}
+}
+
+func (h *WriteHandler) trackUsage(ctx context.Context, orgID platform.ID, n int) {
+	if h.TrackUsage != nil {
+		h.TrackUsage(ctx, orgID, n)
+	}
 }
 
 func (h *WriteHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
@@ -198,6 +235,8 @@ func (h *WriteHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 		}, w)
 		return
 	}
+
+	h.trackUsage(ctx, org.ID, len(data))
 
 	points, err := models.ParsePointsWithPrecision(data, time.Now(), req.Precision)
 	if err != nil {

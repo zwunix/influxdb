@@ -60,6 +60,8 @@ type FluxHandler struct {
 	Now                 func() time.Time
 	OrganizationService platform.OrganizationService
 	ProxyQueryService   query.ProxyQueryService
+
+	TrackUsage func(context.Context, platform.ID, int)
 }
 
 // NewFluxHandler returns a new handler at /api/v2/query for flux queries.
@@ -71,6 +73,7 @@ func NewFluxHandler(b *FluxBackend) *FluxHandler {
 
 		ProxyQueryService:   b.ProxyQueryService,
 		OrganizationService: b.OrganizationService,
+		TrackUsage:          newQueryUsageTracker(),
 	}
 
 	h.HandlerFunc("POST", fluxPath, h.handleQuery)
@@ -80,6 +83,32 @@ func NewFluxHandler(b *FluxBackend) *FluxHandler {
 	h.HandlerFunc("GET", "/api/v2/query/suggestions", h.getFluxSuggestions)
 	h.HandlerFunc("GET", "/api/v2/query/suggestions/:name", h.getFluxSuggestion)
 	return h
+}
+func newQueryUsageTracker() func(context.Context, platform.ID, int) {
+	const namespace = "usage"
+
+	requestCount := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: "query",
+		Name:      "request_count",
+		Help:      "Total number of query requests",
+	}, []string{"orgID"})
+
+	responseBytes := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "response_bytes",
+		Help:      "Count of bytes returned",
+	}, []string{"orgID"})
+
+	return func(ctx context.Context, orgID platform.ID, n int) {
+		requestCount.With(prometheus.Labels{
+			"orgID": orgID.String(),
+		}).Inc()
+
+		responseBytes.With(prometheus.Labels{
+			"orgID": orgID.String(),
+		}).Add(float64(n))
+	}
 }
 
 func (h *FluxHandler) handleQuery(w http.ResponseWriter, r *http.Request) {
@@ -121,6 +150,14 @@ func (h *FluxHandler) handleQuery(w http.ResponseWriter, r *http.Request) {
 			zap.String("handler", "flux"),
 			zap.Error(err),
 		)
+	}
+
+	h.trackUsage(ctx, req.Request.OrganizationID, int(cw.Count()))
+}
+
+func (h *FluxHandler) trackUsage(ctx context.Context, orgID platform.ID, n int) {
+	if h.TrackUsage != nil {
+		h.TrackUsage(ctx, orgID, n)
 	}
 }
 
