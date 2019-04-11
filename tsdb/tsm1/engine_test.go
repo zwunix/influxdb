@@ -59,9 +59,8 @@ func TestIndex_SeriesIDSet(t *testing.T) {
 	}
 
 	// Drop all the series for the gpu measurement and they should no longer
-	// be in the series ID set. This relies on the fact that DeleteBucketRange is really
-	// operating on prefixes.
-	if err := engine.DeleteBucketRange([]byte("gpu"), math.MinInt64, math.MaxInt64); err != nil {
+	// be in the series ID set.
+	if err := engine.DeletePrefixRange([]byte("gpu"), math.MinInt64, math.MaxInt64, nil); err != nil {
 		t.Fatal(err)
 	}
 
