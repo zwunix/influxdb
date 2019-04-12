@@ -128,6 +128,7 @@ func (m *compactionMetrics) PrometheusCollectors() []prometheus.Collector {
 type fileMetrics struct {
 	DiskSize *prometheus.GaugeVec
 	Files    *prometheus.GaugeVec
+	Level    *prometheus.GaugeVec
 }
 
 // newFileMetrics initialises the prometheus metrics for tracking files on disk.
@@ -151,6 +152,12 @@ func newFileMetrics(labels prometheus.Labels) *fileMetrics {
 			Name:      "total",
 			Help:      "Number of files.",
 		}, names),
+		Level: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: fileStoreSubsystem,
+			Name:      "level",
+			Help:      "Levels of TSM files",
+		}, append(names, "file")),
 	}
 }
 
@@ -159,6 +166,7 @@ func (m *fileMetrics) PrometheusCollectors() []prometheus.Collector {
 	return []prometheus.Collector{
 		m.DiskSize,
 		m.Files,
+		m.Level,
 	}
 }
 

@@ -330,6 +330,12 @@ func (t *fileTracker) SetFileCount(files uint64) {
 	t.metrics.Files.With(labels).Set(float64(files))
 }
 
+func (t *fileTracker) SetFileLevel(name string, level int) {
+	labels := t.Labels()
+	labels["file"] = name
+	t.metrics.Level.With(labels).Set(math.Min(float64(level), 5))
+}
+
 // Count returns the number of TSM files currently loaded.
 func (f *FileStore) Count() int {
 	f.mu.RLock()
@@ -595,6 +601,12 @@ func (f *FileStore) Open(ctx context.Context) error {
 			continue
 		}
 		f.files = append(f.files, res.r)
+		name := filepath.Base(res.r.Stats().Path)
+		g, _, err := f.parseFileName(name)
+		if err != nil {
+			return err
+		}
+		f.tracker.SetFileLevel(name, g)
 
 		// Accumulate file store size stats
 		totalSize := uint64(res.r.Size())
