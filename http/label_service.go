@@ -136,13 +136,22 @@ func decodeGetLabelsRequest(ctx context.Context, r *http.Request) (*getLabelsReq
 	qp := r.URL.Query()
 	req := &getLabelsRequest{}
 
-	if orgID := qp.Get("orgID"); orgID != "" {
-		id, err := influxdb.IDFromString(orgID)
-		if err != nil {
-			return nil, err
+	orgID := qp.Get("orgID")
+	if orgID == "" {
+		return nil, &influxdb.Error{
+			Code: influxdb.EInvalid,
+			Msg:  "orgID is required",
 		}
-		req.filter.OrgID = id
 	}
+	id, err := influxdb.IDFromString(orgID)
+	if err != nil {
+		return nil, &influxdb.Error{
+			Code: influxdb.EInvalid,
+			Msg:  "orgID is invalid",
+			Err:  err,
+		}
+	}
+	req.filter.OrgID = id
 
 	return req, nil
 }

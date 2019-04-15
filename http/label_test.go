@@ -20,6 +20,9 @@ func TestService_handleGetLabels(t *testing.T) {
 	type fields struct {
 		LabelService platform.LabelService
 	}
+	type args struct {
+		queryParams map[string][]string
+	}
 	type wants struct {
 		statusCode  int
 		contentType string
@@ -29,8 +32,78 @@ func TestService_handleGetLabels(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields fields
+		args   args
 		wants  wants
 	}{
+		{
+			name: "miss orgID",
+			fields: fields{
+				&mock.LabelService{
+					FindLabelsFn: func(ctx context.Context, filter platform.LabelFilter) ([]*platform.Label, error) {
+						return []*platform.Label{
+							{
+								ID:    platformtesting.MustIDBase16("0b501e7e557ab1ed"),
+								Name:  "hello",
+								OrgID: platformtesting.MustIDBase16("020f755c3c082002"),
+								Properties: map[string]string{
+									"color": "fff000",
+								},
+							},
+							{
+								ID:    platformtesting.MustIDBase16("c0175f0077a77005"),
+								Name:  "example",
+								OrgID: platformtesting.MustIDBase16("020f755c3c082002"),
+								Properties: map[string]string{
+									"color": "fff000",
+								},
+							},
+						}, nil
+					},
+				},
+			},
+			wants: wants{
+				statusCode:  http.StatusBadRequest,
+				contentType: "application/json; charset=utf-8",
+				body:        `{"code":"invalid","message":"orgID is required"}`,
+			},
+		},
+		{
+			name: "invalid orgID",
+			fields: fields{
+				&mock.LabelService{
+					FindLabelsFn: func(ctx context.Context, filter platform.LabelFilter) ([]*platform.Label, error) {
+						return []*platform.Label{
+							{
+								ID:    platformtesting.MustIDBase16("0b501e7e557ab1ed"),
+								Name:  "hello",
+								OrgID: platformtesting.MustIDBase16("020f755c3c082002"),
+								Properties: map[string]string{
+									"color": "fff000",
+								},
+							},
+							{
+								ID:    platformtesting.MustIDBase16("c0175f0077a77005"),
+								Name:  "example",
+								OrgID: platformtesting.MustIDBase16("020f755c3c082002"),
+								Properties: map[string]string{
+									"color": "fff000",
+								},
+							},
+						}, nil
+					},
+				},
+			},
+			args: args{
+				queryParams: map[string][]string{
+					"orgID": []string{"badID"},
+				},
+			},
+			wants: wants{
+				statusCode:  http.StatusBadRequest,
+				contentType: "application/json; charset=utf-8",
+				body:        `{"code":"invalid","error": "id must have a length of 16 bytes","message":"orgID is invalid"}`,
+			},
+		},
 		{
 			name: "get all labels",
 			fields: fields{
@@ -38,21 +111,28 @@ func TestService_handleGetLabels(t *testing.T) {
 					FindLabelsFn: func(ctx context.Context, filter platform.LabelFilter) ([]*platform.Label, error) {
 						return []*platform.Label{
 							{
-								ID:   platformtesting.MustIDBase16("0b501e7e557ab1ed"),
-								Name: "hello",
+								ID:    platformtesting.MustIDBase16("0b501e7e557ab1ed"),
+								Name:  "hello",
+								OrgID: platformtesting.MustIDBase16("020f755c3c082002"),
 								Properties: map[string]string{
 									"color": "fff000",
 								},
 							},
 							{
-								ID:   platformtesting.MustIDBase16("c0175f0077a77005"),
-								Name: "example",
+								ID:    platformtesting.MustIDBase16("c0175f0077a77005"),
+								Name:  "example",
+								OrgID: platformtesting.MustIDBase16("020f755c3c082002"),
 								Properties: map[string]string{
 									"color": "fff000",
 								},
 							},
 						}, nil
 					},
+				},
+			},
+			args: args{
+				queryParams: map[string][]string{
+					"orgID": []string{"020f755c3c082002"},
 				},
 			},
 			wants: wants{
@@ -66,14 +146,16 @@ func TestService_handleGetLabels(t *testing.T) {
   "labels": [
     {
       "id": "0b501e7e557ab1ed",
-      "name": "hello",
+	  "name": "hello",
+	  "orgID": "020f755c3c082002",
       "properties": {
         "color": "fff000"
       }
     },
     {
       "id": "c0175f0077a77005",
-      "name": "example",
+	  "name": "example",
+	  "orgID": "020f755c3c082002",
       "properties": {
         "color": "fff000"
       }
@@ -90,6 +172,11 @@ func TestService_handleGetLabels(t *testing.T) {
 					FindLabelsFn: func(ctx context.Context, filter platform.LabelFilter) ([]*platform.Label, error) {
 						return []*platform.Label{}, nil
 					},
+				},
+			},
+			args: args{
+				queryParams: map[string][]string{
+					"orgID": []string{"020f755c3c082002"},
 				},
 			},
 			wants: wants{
@@ -111,6 +198,13 @@ func TestService_handleGetLabels(t *testing.T) {
 			h := NewLabelHandler(tt.fields.LabelService)
 
 			r := httptest.NewRequest("GET", "http://any.url", nil)
+			qp := r.URL.Query()
+			for k, vs := range tt.args.queryParams {
+				for _, v := range vs {
+					qp.Add(k, v)
+				}
+			}
+			r.URL.RawQuery = qp.Encode()
 
 			w := httptest.NewRecorder()
 
