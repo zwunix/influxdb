@@ -7,6 +7,7 @@ import (
 	influxdb "github.com/influxdata/influxdb"
 	"github.com/influxdata/influxdb/authorizer"
 	"github.com/influxdata/influxdb/chronograf/server"
+	"github.com/influxdata/influxdb/kit/prom"
 	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxdb/storage"
 	"go.uber.org/zap"
@@ -43,6 +44,8 @@ type APIBackend struct {
 
 	NewBucketService func(*influxdb.Source) (influxdb.BucketService, error)
 	NewQueryService  func(*influxdb.Source) (query.ProxyQueryService, error)
+
+	PromRegistry *prom.Registry
 
 	PointsWriter                    storage.PointsWriter
 	AuthorizationService            influxdb.AuthorizationService
