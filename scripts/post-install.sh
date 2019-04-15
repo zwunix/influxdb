@@ -29,9 +29,6 @@ if [[ $? -ne 0 ]]; then
     useradd --system -U -M influxdb -s /bin/false -d $DATA_DIR
 fi
 
-chown -R -L influxdb:influxdb $DATA_DIR
-chown -R -L influxdb:influxdb $LOG_DIR
-
 # Add defaults file, if it doesn't exist
 if [[ ! -f /etc/default/influxdb ]]; then
     touch /etc/default/influxdb
@@ -53,6 +50,12 @@ if [[ -f /etc/redhat-release ]]; then
         install_chkconfig
     fi
 elif [[ -f /etc/debian_version ]]; then
+    # Ownership for RH-based platforms is set in build.py via the `rmp-attr` option.
+    # We perform ownership change only for Debian-based systems.
+    # Moving these lines out of this if statement would make `rmp -V` fail after installation.
+    chown -R -L influxdb:influxdb $DATA_DIR
+    chown -R -L influxdb:influxdb $LOG_DIR
+
     # Debian/Ubuntu logic
     if command -v systemctl &>/dev/null; then
         install_systemd
