@@ -7,9 +7,11 @@ import (
 	influxdb "github.com/influxdata/influxdb"
 	"github.com/influxdata/influxdb/authorizer"
 	"github.com/influxdata/influxdb/chronograf/server"
+	"github.com/influxdata/influxdb/http/metric"
 	"github.com/influxdata/influxdb/kit/prom"
 	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxdb/storage"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -45,7 +47,8 @@ type APIBackend struct {
 	NewBucketService func(*influxdb.Source) (influxdb.BucketService, error)
 	NewQueryService  func(*influxdb.Source) (query.ProxyQueryService, error)
 
-	PromRegistry *prom.Registry
+	WriteMetricRecorder metric.Recorder
+	QueryMetricRecorder metric.Recorder
 
 	PointsWriter                    storage.PointsWriter
 	AuthorizationService            influxdb.AuthorizationService
@@ -74,6 +77,21 @@ type APIBackend struct {
 	ChronografService               *server.Service
 	OrgLookupService                authorizer.OrganizationService
 	DocumentService                 influxdb.DocumentService
+}
+
+// PrometheusCollectors exposes the prometheus collectors associated with an APIBackend.
+func (b *APIBackend) PrometheusCollectors() []prometheus.Collector {
+	var cs []prometheus.Collector
+
+	if pc, ok := b.WriteMetricRecorder.(prom.PrometheusCollector); ok {
+		cs = append(cs, pc.PrometheusCollectors()...)
+	}
+
+	if pc, ok := b.QueryMetricRecorder.(prom.PrometheusCollector); ok {
+		cs = append(cs, pc.PrometheusCollectors()...)
+	}
+
+	return cs
 }
 
 // NewAPIHandler constructs all api handlers beneath it and returns an APIHandler

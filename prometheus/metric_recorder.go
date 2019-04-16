@@ -71,8 +71,8 @@ func (r *MetricRecorder) Record(ctx context.Context, m metric.Metric) {
 	r.responseBytes.With(labels).Add(float64(m.ResponseBytes))
 }
 
-// Collectors exposes the prometheus collectors associated with a metric recorder.
-func (r *MetricRecorder) Collectors() []prometheus.Collector {
+// PrometheusCollectors exposes the prometheus collectors associated with a metric recorder.
+func (r *MetricRecorder) PrometheusCollectors() []prometheus.Collector {
 	return []prometheus.Collector{
 		r.count,
 		r.requestBytes,

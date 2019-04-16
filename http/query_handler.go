@@ -19,12 +19,13 @@ import (
 	"github.com/influxdata/flux/parser"
 	platform "github.com/influxdata/influxdb"
 	pcontext "github.com/influxdata/influxdb/context"
+	"github.com/influxdata/influxdb/http/metric"
 	"github.com/influxdata/influxdb/kit/check"
 	"github.com/influxdata/influxdb/kit/tracing"
 	"github.com/influxdata/influxdb/query"
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
+	prom "github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -35,7 +36,8 @@ const (
 // FluxBackend is all services and associated parameters required to construct
 // the FluxHandler.
 type FluxBackend struct {
-	Logger *zap.Logger
+	Logger              *zap.Logger
+	QueryMetricRecorder metric.Recorder
 
 	OrganizationService platform.OrganizationService
 	ProxyQueryService   query.ProxyQueryService
@@ -44,7 +46,8 @@ type FluxBackend struct {
 // NewFluxBackend returns a new instance of FluxBackend.
 func NewFluxBackend(b *APIBackend) *FluxBackend {
 	return &FluxBackend{
-		Logger: b.Logger.With(zap.String("handler", "query")),
+		Logger:              b.Logger.With(zap.String("handler", "query")),
+		QueryMetricRecorder: b.QueryMetricRecorder,
 
 		ProxyQueryService:   b.FluxService,
 		OrganizationService: b.OrganizationService,
@@ -61,7 +64,7 @@ type FluxHandler struct {
 	OrganizationService platform.OrganizationService
 	ProxyQueryService   query.ProxyQueryService
 
-	TrackUsage func(context.Context, platform.ID, int)
+	MetricRecorder metric.Recorder
 }
 
 // NewFluxHandler returns a new handler at /api/v2/query for flux queries.
@@ -73,7 +76,7 @@ func NewFluxHandler(b *FluxBackend) *FluxHandler {
 
 		ProxyQueryService:   b.ProxyQueryService,
 		OrganizationService: b.OrganizationService,
-		TrackUsage:          newQueryUsageTracker(),
+		MetricRecorder:      b.QueryMetricRecorder,
 	}
 
 	h.HandlerFunc("POST", fluxPath, h.handleQuery)
@@ -84,32 +87,6 @@ func NewFluxHandler(b *FluxBackend) *FluxHandler {
 	h.HandlerFunc("GET", "/api/v2/query/suggestions/:name", h.getFluxSuggestion)
 	return h
 }
-func newQueryUsageTracker() func(context.Context, platform.ID, int) {
-	const namespace = "usage"
-
-	requestCount := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: namespace,
-		Subsystem: "query",
-		Name:      "request_count",
-		Help:      "Total number of query requests",
-	}, []string{"orgID"})
-
-	responseBytes := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: namespace,
-		Name:      "response_bytes",
-		Help:      "Count of bytes returned",
-	}, []string{"orgID"})
-
-	return func(ctx context.Context, orgID platform.ID, n int) {
-		requestCount.With(prometheus.Labels{
-			"orgID": orgID.String(),
-		}).Inc()
-
-		responseBytes.With(prometheus.Labels{
-			"orgID": orgID.String(),
-		}).Add(float64(n))
-	}
-}
 
 func (h *FluxHandler) handleQuery(w http.ResponseWriter, r *http.Request) {
 	span, r := tracing.ExtractFromHTTPRequest(r, "FluxHandler")
@@ -117,17 +94,34 @@ func (h *FluxHandler) handleQuery(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
+	// TODO(desa): I really don't like how we're recording the usage metrics here
+	// Ideally this will be moved when we solve https://github.com/influxdata/influxdb/issues/13403
+	var orgID platform.ID
+	var requestBytes int
+	sw := newStatusResponseWriter(w)
+	w = sw
+	defer func() {
+		h.MetricRecorder.Record(ctx, metric.Metric{
+			OrgID:         orgID,
+			Endpoint:      r.URL.Path, // This should be sufficient for the time being as it should only be single endpoint.
+			RequestBytes:  requestBytes,
+			ResponseBytes: sw.responseBytes,
+			Status:        sw.code(),
+		})
+	}()
+
 	a, err := pcontext.GetAuthorizer(ctx)
 	if err != nil {
 		EncodeError(ctx, err, w)
 		return
 	}
 
-	req, err := decodeProxyQueryRequest(ctx, r, a, h.OrganizationService)
+	req, n, err := decodeProxyQueryRequest(ctx, r, a, h.OrganizationService)
 	if err != nil && err != platform.ErrAuthorizerNotSupported {
 		EncodeError(ctx, err, w)
 		return
 	}
+	requestBytes = n
 
 	// Transform the context into one with the request's authorization.
 	ctx = pcontext.SetAuthorizer(ctx, req.Request.Authorization)
@@ -150,14 +144,6 @@ func (h *FluxHandler) handleQuery(w http.ResponseWriter, r *http.Request) {
 			zap.String("handler", "flux"),
 			zap.Error(err),
 		)
-	}
-
-	h.trackUsage(ctx, req.Request.OrganizationID, int(cw.Count()))
-}
-
-func (h *FluxHandler) trackUsage(ctx context.Context, orgID platform.ID, n int) {
-	if h.TrackUsage != nil {
-		h.TrackUsage(ctx, orgID, n)
 	}
 }
 
@@ -353,7 +339,7 @@ func (h *FluxHandler) getFluxSuggestion(w http.ResponseWriter, r *http.Request) 
 }
 
 // PrometheusCollectors satisifies the prom.PrometheusCollector interface.
-func (h *FluxHandler) PrometheusCollectors() []prometheus.Collector {
+func (h *FluxHandler) PrometheusCollectors() []prom.Collector {
 	// TODO: gather and return relevant metrics.
 	return nil
 }

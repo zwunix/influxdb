@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/influxdata/influxdb/http/metric"
 	"github.com/julienschmidt/httprouter"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
 	platform "github.com/influxdata/influxdb"
@@ -24,7 +24,8 @@ import (
 // WriteBackend is all services and associated parameters required to construct
 // the WriteHandler.
 type WriteBackend struct {
-	Logger *zap.Logger
+	Logger              *zap.Logger
+	WriteMetricRecorder metric.Recorder
 
 	PointsWriter        storage.PointsWriter
 	BucketService       platform.BucketService
@@ -34,7 +35,8 @@ type WriteBackend struct {
 // NewWriteBackend returns a new instance of WriteBackend.
 func NewWriteBackend(b *APIBackend) *WriteBackend {
 	return &WriteBackend{
-		Logger: b.Logger.With(zap.String("handler", "write")),
+		Logger:              b.Logger.With(zap.String("handler", "write")),
+		WriteMetricRecorder: b.WriteMetricRecorder,
 
 		PointsWriter:        b.PointsWriter,
 		BucketService:       b.BucketService,
@@ -53,7 +55,7 @@ type WriteHandler struct {
 
 	PointsWriter storage.PointsWriter
 
-	TrackUsage func(context.Context, platform.ID, int)
+	MetricRecorder metric.Recorder
 }
 
 const (
@@ -64,6 +66,7 @@ const (
 
 // NewWriteHandler creates a new handler at /api/v2/write to receive line protocol.
 func NewWriteHandler(b *WriteBackend) *WriteHandler {
+
 	h := &WriteHandler{
 		Router: NewRouter(),
 		Logger: b.Logger,
@@ -71,44 +74,11 @@ func NewWriteHandler(b *WriteBackend) *WriteHandler {
 		PointsWriter:        b.PointsWriter,
 		BucketService:       b.BucketService,
 		OrganizationService: b.OrganizationService,
-		TrackUsage:          newWriteUsageTracker(),
+		MetricRecorder:      b.WriteMetricRecorder,
 	}
 
 	h.HandlerFunc("POST", writePath, h.handleWrite)
 	return h
-}
-
-func newWriteUsageTracker() func(context.Context, platform.ID, int) {
-	const namespace = "usage"
-
-	requestCount := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: namespace,
-		Subsystem: "write",
-		Name:      "request_count",
-		Help:      "Total number of write requests",
-	}, []string{"orgID"})
-
-	requestBytes := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: namespace,
-		Name:      "request_bytes",
-		Help:      "Count of bytes written",
-	}, []string{"orgID"})
-
-	return func(ctx context.Context, orgID platform.ID, n int) {
-		requestCount.With(prometheus.Labels{
-			"orgID": orgID.String(),
-		}).Inc()
-
-		requestBytes.With(prometheus.Labels{
-			"orgID": orgID.String(),
-		}).Add(float64(n))
-	}
-}
-
-func (h *WriteHandler) trackUsage(ctx context.Context, orgID platform.ID, n int) {
-	if h.TrackUsage != nil {
-		h.TrackUsage(ctx, orgID, n)
-	}
 }
 
 func (h *WriteHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
@@ -117,6 +87,22 @@ func (h *WriteHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	defer r.Body.Close()
+
+	// TODO(desa): I really don't like how we're recording the usage metrics here
+	// Ideally this will be moved when we solve https://github.com/influxdata/influxdb/issues/13403
+	var orgID platform.ID
+	var requestBytes int
+	sw := newStatusResponseWriter(w)
+	w = sw
+	defer func() {
+		h.MetricRecorder.Record(ctx, metric.Metric{
+			OrgID:         orgID,
+			Endpoint:      r.URL.Path, // This should be sufficient for the time being as it should only be single endpoint.
+			RequestBytes:  requestBytes,
+			ResponseBytes: sw.responseBytes,
+			Status:        sw.code(),
+		})
+	}()
 
 	in := r.Body
 	if r.Header.Get("Content-Encoding") == "gzip" {
@@ -169,6 +155,7 @@ func (h *WriteHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 
 		org = o
 	}
+	orgID = org.ID
 
 	var bucket *platform.Bucket
 	if id, err := platform.IDFromString(req.Bucket); err == nil {
@@ -235,8 +222,7 @@ func (h *WriteHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 		}, w)
 		return
 	}
-
-	h.trackUsage(ctx, org.ID, len(data))
+	requestBytes = len(data)
 
 	points, err := models.ParsePointsWithPrecision(data, time.Now(), req.Precision)
 	if err != nil {
