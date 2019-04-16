@@ -3,7 +3,7 @@ import React, {Component, KeyboardEvent, ChangeEvent} from 'react'
 import classnames from 'classnames'
 
 // Components
-import {Input} from '@influxdata/clockface'
+import {Input, PageTitle} from '@influxdata/clockface'
 import {ClickOutside} from 'src/shared/components/ClickOutside'
 
 // Decorators
@@ -14,6 +14,7 @@ interface Props {
   name: string
   placeholder: string
   maxLength: number
+  prefix: string
 }
 
 interface State {
@@ -23,6 +24,10 @@ interface State {
 
 @ErrorHandling
 class RenamablePageTitle extends Component<Props, State> {
+  public static defaultProps = {
+    prefix: '',
+  }
+
   constructor(props: Props) {
     super(props)
 
@@ -38,16 +43,20 @@ class RenamablePageTitle extends Component<Props, State> {
 
     if (isEditing) {
       return (
-        <div className="renamable-page-title">
-          <ClickOutside onClickOutside={this.handleStopEditing}>
-            {this.input}
-          </ClickOutside>
-        </div>
+        <>
+          <PageTitle title={`${this.props.prefix} / `} />
+          <div className="renamable-page-title">
+            <ClickOutside onClickOutside={this.handleStopEditing}>
+              {this.input}
+            </ClickOutside>
+          </div>
+        </>
       )
     }
 
     return (
       <div className="renamable-page-title">
+        <PageTitle title={`${this.props.prefix} / `} />
         <div className={this.titleClassName} onClick={this.handleStartEditing}>
           {name || placeholder}
           <span className="icon pencil" />

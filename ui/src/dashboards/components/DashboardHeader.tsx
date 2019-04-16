@@ -1,5 +1,6 @@
 // Libraries
 import React, {Component} from 'react'
+import _ from 'lodash'
 
 // Components
 import {Page} from 'src/pageLayout'
@@ -14,6 +15,7 @@ import {
   IconFont,
   ButtonShape,
   ComponentColor,
+  PageTitle,
 } from '@influxdata/clockface'
 
 // Constants
@@ -25,10 +27,11 @@ import {
 // Types
 import * as AppActions from 'src/types/actions/app'
 import * as QueriesModels from 'src/types/queries'
-import {Dashboard} from '@influxdata/influx'
+import {Dashboard, Organization} from '@influxdata/influx'
 import {AutoRefresh, AutoRefreshStatus} from 'src/types'
 
 interface Props {
+  org: Organization
   activeDashboard: string
   dashboard: Dashboard
   timeRange: QueriesModels.TimeRange
@@ -57,6 +60,7 @@ export default class DashboardHeader extends Component<Props> {
 
   public render() {
     const {
+      org,
       handleChooseAutoRefresh,
       onManualRefresh,
       timeRange: {upper, lower},
@@ -74,6 +78,7 @@ export default class DashboardHeader extends Component<Props> {
       <Page.Header fullWidth={true} inPresentationMode={isHidden}>
         <Page.Header.Left>
           <RenamablePageTitle
+          prefix={_.get(org, 'name', ''}
             maxLength={DASHBOARD_NAME_MAX_LENGTH}
             onRename={onRenameDashboard}
             name={activeDashboard}
